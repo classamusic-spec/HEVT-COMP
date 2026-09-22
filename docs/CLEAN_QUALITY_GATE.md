@@ -17,7 +17,7 @@ test output.
 | HPF | **PASS** | −3.01 dB at cutoff, −12.30 dB an octave below, 0.000 dB a decade above; audible path untouched (deviation 0.0); stable under 20↔400 Hz block-rate modulation |
 | MIX ALIGNMENT | **PASS** | Neutral null residual 0.0 at MIX 0/30/50/100 %; measured latency = reported at every quality and 44.1/48/96/192 kHz; 50 % parallel with oversampled path flat within 0.001 dB to 18 kHz |
 | AUTOMATION | **PASS** | 6000 blocks of random automation of all 18 parameters with random block sizes 1–2048 and occasional +12 dBFS input: all finite, peak ≤ safety ceiling; mode / detector / tube / iron / quality / bypass changes click-free (second-difference peaks at steady-state level) |
-| REALTIME | **PASS** | 0 heap allocations in 3000 randomised audio callbacks with all features exercised (`RealtimeTests`); no locks by design; FTZ/DAZ; output identical for host block sizes 16…4096 (deviation 0.0); ASan/UBSan clean; ThreadSanitizer run on concurrent audio / UI / automation threads (see `TESTING.md`) |
+| REALTIME | **PASS** | 0 heap allocations in 3000 randomised audio callbacks with all features exercised (`RealtimeTests`); no locks by design; FTZ/DAZ; output identical for host block sizes 16…4096 (deviation 0.0); ASan/UBSan clean; ThreadSanitizer clean on concurrent audio / UI / automation threads and the full plug-in suite (see `TESTING.md`) |
 | STATE | **PASS** | 20 randomised session round trips; A/B switch / copy / persistence; 35 presets load exactly; user presets and favourites persist; legacy and corrupt state handled; undo works |
 
 ## Listening

@@ -60,7 +60,9 @@ itself.
 |---|---|---|
 | ASan + UBSan (GCC, `-DHEAT_SANITIZE=ON`, RelWithDebInfo) | `heat_dsp_tests` | 55 tests, 2446 checks, 0 failed, **no sanitizer reports** |
 | ASan + UBSan | `xvfb-run -a heat_plugin_tests` | 15 tests, 971 checks, 0 failed, **no sanitizer reports** |
-| TSan (GCC, `-DHEAT_SANITIZE_THREAD=ON`, RelWithDebInfo) | `heat_plugin_tests Realtime` | See below |
+| TSan (GCC, `-DHEAT_SANITIZE_THREAD=ON`, RelWithDebInfo) | `xvfb-run -a heat_plugin_tests Realtime` | 2 tests, 0 failed, **0 ThreadSanitizer reports** |
+| TSan | `xvfb-run -a heat_plugin_tests` (full suite) | 15 tests, 971 checks, 0 failed, **0 ThreadSanitizer reports** |
+| TSan | `heat_dsp_tests` | 55 tests, 2446 checks, 0 failed, **0 ThreadSanitizer reports** |
 
 The first ASan run found one real bug — in the *test harness*, not the
 product: the multi-instance test copied 256-sample blocks into a
@@ -68,12 +70,19 @@ product: the multi-instance test copied 256-sample blocks into a
 block (`AutomationTests.cpp`, heap-buffer-overflow). The test now renders
 `256 × 188` samples. No product code needed changing.
 
-ThreadSanitizer: run in progress (result recorded in the next revision of this file).
+ThreadSanitizer: the concurrency test drives `processBlock`, the meter
+telemetry and parameter writes from three threads at once; the full plug-in
+suite adds the editor stress test and multi-instance rendering. No data races
+were reported. Clang 18 in this container ships no TSan runtime, so the TSan
+build uses GCC 13 (`-DCMAKE_CXX_COMPILER=g++ -DHEAT_SANITIZE_THREAD=ON`).
 
 ## Plug-in validation
 
 `pluginval 1.0.4 --strictness-level 10 --validate-in-process` on the Release
-VST3, under Xvfb so the editor tests run: **SUCCESS** on the Phase 15–16 build (re-run on the final build recorded in the next revision of this file).
+VST3, under Xvfb so the editor tests run: **SUCCESS** — all 25 test groups passed (plugin info, open cold / warm,
+programs, editor, open editor whilst processing, audio processing,
+non-releasing processing, state, automation, editor automation, parameter
+thread safety, fuzz parameters, bus tests, background-thread state, …).
 
 ## Realtime safety by design
 
@@ -94,9 +103,12 @@ VST3, under Xvfb so the editor tests run: **SUCCESS** on the Phase 15–16 build
 * Fidelity vs the locked reference: overall MAE 12.4 / 255, flat panel 2.5
   (method in `UI_SYSTEM.md`).
 * Render benchmark (`heat_snapshot out.png <scale> <gr> bench`): per-frame
-  repaint of the animated regions (meter + COMPRESS ring) 1.49 ms at 100 %,
-  2.30 ms at 75 %, 6.00 ms at 125 % (software renderer, one core); a full
-  editor repaint 10.5–22.6 ms, which only happens on open / resize.
+  repaint of the animated regions (meter + COMPRESS ring) 1.57 ms at 100 %,
+  2.39 ms at 75 %, 6.12 ms at 125 % (software renderer, one core; repeat of
+  an earlier run within 0.1 ms); a full editor repaint 11.1 / 11.1 / 22.1 ms,
+  which only happens on open / resize. The 75 % frame costing more than
+  100 % was not investigated further; fractional pixel alignment of the
+  cached layers at that scale is the suspected cause.
 * Editor open / close / resize stress under the plug-in tests; pluginval
   editor tests at strictness 10.
 

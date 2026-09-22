@@ -152,7 +152,7 @@ Built as the JUCE-free `heat_dsp` library and tested in isolation.
 * **CPU** (48 kHz, 256-sample blocks, one stereo instance): 0.41 % of a core
   for CLEAN without colour up to 5.03 % for DRIVE + TUBE + IRON at ULTRA.
 * **UI render cost** (`heat_snapshot … bench`, software renderer): animated
-  regions 1.5–6.0 ms per frame depending on scale; full repaint only on
+  regions 1.6–6.1 ms per frame depending on scale; full repaint only on
   open / resize.
 * **Realtime test** (`Tests/RealtimeTests.cpp`): a global `operator new`
   hook counts allocations inside `processBlock` — 0 in 3000 callbacks with
@@ -164,7 +164,10 @@ Built as the JUCE-free `heat_dsp` library and tested in isolation.
   256-sample blocks copied into a 48000-sample buffer, which is not a
   multiple of 256) → the test now renders 256 × 188 samples. After the fix:
   DSP 55 tests / 2446 checks and plug-in 15 tests / 971 checks pass with no
-  ASan / UBSan reports. TSan: see `TESTING.md`.
+  ASan / UBSan reports. TSan (GCC): Realtime concurrency test, the full
+  plug-in suite and the DSP suite — 0 reports.
+* **pluginval 1.0.4, strictness 10, in-process, with editor (Xvfb)** on the
+  final Release VST3: SUCCESS, 25 / 25 test groups.
 * Clang 18 in this container has no TSan runtime installed
   (`libclang_rt.tsan` missing); TSan builds use GCC 13 (`libtsan`).
 * Documentation: product spec, DSP architecture, macro, gain computer,
