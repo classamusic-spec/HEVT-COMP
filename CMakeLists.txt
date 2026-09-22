@@ -46,7 +46,11 @@ add_library(heat_dsp STATIC
     Source/DSP/SidechainFilter.cpp
     Source/DSP/CompressMacro.cpp
     Source/DSP/CompressorEngine.cpp
-    Source/Modes/ModeProfiles.cpp)
+    Source/DSP/HeatEngine.cpp
+    Source/Modes/ModeProfiles.cpp
+    Source/Nonlinear/TubeStage.cpp
+    Source/Nonlinear/IronStage.cpp
+    Source/Quality/Oversampler.cpp)
 target_include_directories(heat_dsp PUBLIC Source)
 target_compile_features(heat_dsp PUBLIC cxx_std_20)
 if(MSVC)
@@ -141,7 +145,11 @@ if(HEAT_BUILD_TESTS)
         Tests/GainComputerTests.cpp
         Tests/CompressMacroTests.cpp
         Tests/DetectorTests.cpp
-        Tests/BallisticsTests.cpp)
+        Tests/BallisticsTests.cpp
+        Tests/StereoTests.cpp
+        Tests/SidechainTests.cpp
+        Tests/MixAlignmentTests.cpp
+        Tests/EngineTests.cpp)
     target_link_libraries(heat_dsp_tests PRIVATE heat_dsp)
     add_test(NAME heat_dsp_tests COMMAND heat_dsp_tests)
 

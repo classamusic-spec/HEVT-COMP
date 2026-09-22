@@ -81,9 +81,9 @@ namespace heat::dsp
             /* memory */ 0.75f, 0.55f, 600.0f, 5.0f,
             /* detectorSoftening */ 0.3f,
             /* makeupFactor */ 0.65f,
-            /* colorDrive */ { { 0.10f, 0.14f, 0.20f, 0.28f, 0.36f } },
-            /* colorGrInteraction */ 0.01f,
-            /* colorBias */ 0.25f
+            /* colorDrive */ { { 0.05f, 0.07f, 0.10f, 0.13f, 0.17f } },
+            /* colorGrInteraction */ 0.08f,
+            /* colorBias */ 0.15f
         };
 
         const ModeProfile driveProfile {
@@ -97,7 +97,7 @@ namespace heat::dsp
             /* detectorSoftening */ 0.0f,
             /* makeupFactor */ 0.7f,
             /* colorDrive */ { { 0.25f, 0.34f, 0.45f, 0.58f, 0.72f } },
-            /* colorGrInteraction */ 0.025f,
+            /* colorGrInteraction */ 0.45f,
             /* colorBias */ 0.12f
         };
 

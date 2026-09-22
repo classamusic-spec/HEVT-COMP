@@ -180,14 +180,15 @@ namespace heat::dsp
                 out.makeupDb[i] = std::clamp (-grRef * mf, 0.0f, CompressMacro::makeupLimitDb);
             }
 
+            const float cd = colorDrive.next();
+            const float cb = colorBias.next();
+            const float ci = colorGrInteraction.next();
             if (out.colorDrive != nullptr)
-                out.colorDrive[i] = colorDrive.next();
+                out.colorDrive[i] = cd;
+            if (out.colorBias != nullptr)
+                out.colorBias[i] = cb;
+            if (out.colorInteraction != nullptr)
+                out.colorInteraction[i] = ci;
         }
-
-        // Keep the unused smoothers moving so telemetry stays current.
-        if (out.colorDrive == nullptr)
-            colorDrive.skip (numSamples);
-        colorGrInteraction.skip (numSamples);
-        colorBias.skip (numSamples);
     }
 }

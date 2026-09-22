@@ -47,7 +47,7 @@ namespace heat::dsp
 
         // Built-in colour stage (the mode's own amplifier character).
         MacroCurve colorDrive;      // 0..1 saturation drive vs COMPRESS
-        float colorGrInteraction;   // extra drive per dB of gain reduction
+        float colorGrInteraction;   // extra drive at full reduction (scaled by 1 - linear GR)
         float colorBias;            // asymmetry (even harmonics)
     };
 

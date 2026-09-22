@@ -38,6 +38,8 @@ namespace heat::dsp
             float* grDb[maxChannels] {};   // per-channel gain reduction
             float* makeupDb = nullptr;      // shared makeup gain
             float* colorDrive = nullptr;    // shared colour drive (0..1)
+            float* colorBias = nullptr;     // shared colour asymmetry
+            float* colorInteraction = nullptr; // extra colour drive at full reduction
         };
 
         void prepare (double sampleRate) noexcept;
