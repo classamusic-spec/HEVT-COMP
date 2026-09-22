@@ -12,8 +12,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-option(HEAT_BUILD_TESTS "Build HEAT unit tests and measurement tools" OFF)
-option(HEAT_BUILD_TOOLS "Build the UI snapshot renderer" OFF)
+option(HEAT_BUILD_TESTS "Build HEAT unit tests and measurement tools" ON)
+option(HEAT_BUILD_TOOLS "Build the UI snapshot renderer" ON)
 option(HEAT_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 set(HEAT_JUCE_DIR "" CACHE PATH "Path to a local JUCE 8 checkout (fetched automatically when empty)")
 
@@ -81,7 +81,16 @@ set(HEAT_PLUGIN_SOURCES
     Source/Core/Parameters.cpp
     Source/Core/PluginState.cpp
     Source/Core/PresetManager.cpp
-    Source/Core/FactoryPresets.cpp)
+    Source/Core/FactoryPresets.cpp
+    Source/UI/HeatTheme.cpp
+    Source/UI/HeatLookAndFeel.cpp
+    Source/UI/HeatKnob.cpp
+    Source/UI/GainReductionDisplay.cpp
+    Source/UI/SegmentedSelector.cpp
+    Source/UI/Header.cpp
+    Source/UI/AdvancedPanel.cpp
+    Source/UI/Icons.cpp
+    Source/Graphics/SilverSurface.cpp)
 
 set(HEAT_JUCE_MODULES
     juce::juce_audio_utils
@@ -103,7 +112,7 @@ set(HEAT_JUCE_DEFINITIONS
 function(heat_configure_juce_target target)
     target_sources(${target} PRIVATE ${HEAT_PLUGIN_SOURCES})
     target_include_directories(${target} PRIVATE Source)
-    target_compile_definitions(${target} PUBLIC ${HEAT_JUCE_DEFINITIONS})
+    target_compile_definitions(${target} PUBLIC ${HEAT_JUCE_DEFINITIONS} HEAT_VERSION_STRING="${PROJECT_VERSION}")
     target_link_libraries(${target}
         PRIVATE
             heat_dsp
