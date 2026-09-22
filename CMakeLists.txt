@@ -149,9 +149,17 @@ if(HEAT_BUILD_TESTS)
         Tests/StereoTests.cpp
         Tests/SidechainTests.cpp
         Tests/MixAlignmentTests.cpp
-        Tests/EngineTests.cpp)
+        Tests/EngineTests.cpp
+        Tests/StageHarness.cpp
+        Tests/NonlinearTests.cpp
+        Tests/AliasingTests.cpp)
     target_link_libraries(heat_dsp_tests PRIVATE heat_dsp)
     add_test(NAME heat_dsp_tests COMMAND heat_dsp_tests)
+
+    # Measurement generator: CSV + WAV output for the quality gates, CPU profile.
+    add_executable(heat_measure Tools/HeatMeasure.cpp Tests/TestSignals.cpp Tests/StageHarness.cpp)
+    target_include_directories(heat_measure PRIVATE Tests)
+    target_link_libraries(heat_measure PRIVATE heat_dsp)
 
 endif()
 

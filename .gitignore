@@ -3,3 +3,4 @@ build*/
 *.user
 .DS_Store
 /out/
+docs/measurements/wav/

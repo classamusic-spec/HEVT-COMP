@@ -16,8 +16,8 @@ namespace heat::dsp
     //                  offset → a narrow hysteresis-like loop)
     //   saturation   : e = k * softCubic(φ_h)  → mostly odd harmonics that grow
     //                  as frequency falls and level rises
-    //   weight       : additive low shelf (+1.6 dB * amount below ~90 Hz),
-    //                  implemented as x + (G-1) * LP2(x) so it is modulation-safe
+    //   weight       : additive first-order low shelf (+1.6 dB * amount,
+    //                  corner 80 Hz), x + (G-1) * LP1(x), modulation-safe
     //   HF softening : blend towards a 24 kHz one-pole, scaled by amount
     //
     // The distortion component is DC-blocked; amount = 0 is an exact bypass.
@@ -40,8 +40,8 @@ namespace heat::dsp
         float prevFlux = 0.0f;
         float slopeScale = 1.0f;
 
-        // Low-shelf low-pass (TPT SVF, fixed cutoff).
-        float svfA1 = 0.0f, svfA2 = 0.0f, svfA3 = 0.0f, ic1 = 0.0f, ic2 = 0.0f;
+        // Low-shelf low-pass (one pole, fixed cutoff).
+        float shelfCoeff = 0.0f, shelfState = 0.0f;
 
         DCBlocker dc;
         OnePoleLowpass hf;
