@@ -1,7 +1,7 @@
 // heat_snapshot — renders the HEAT editor headlessly to PNG for visual
 // comparison with design/reference/HEAT_LOCKED_REFERENCE.png.
 //
-//   heat_snapshot <out.png> [scale=1.0] [grDb=-3.66] [state=reference|advanced|clean]
+//   heat_snapshot <out.png> [scale=1.0] [grDb=-3.66] [state=reference|advanced|clean|bench]
 
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
@@ -38,6 +38,31 @@ int main (int argc, char** argv)
             heatEditor->getMainPanel().toggleAdvanced();
 
         const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
+
+        if (state == "bench")
+        {
+            // Frame cost: whole editor, and the per-frame dirty region (meter +
+            // COMPRESS knob) that the vblank animation actually repaints.
+            auto time = [] (auto&& fn, int n)
+            {
+                const auto t0 = juce::Time::getMillisecondCounterHiRes();
+                for (int i = 0; i < n; ++i)
+                    fn (i);
+                return (juce::Time::getMillisecondCounterHiRes() - t0) / n;
+            };
+            auto& panel = heatEditor->getMainPanel();
+            const double full = time ([&] (int) { editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f); }, 30);
+            const auto meterArea = juce::Rectangle<int> (627, 137, 285, 419);
+            const auto knobArea = juce::Rectangle<int> (600, 545, 340, 340);
+            const double animated = time ([&] (int i)
+            {
+                panel.setPreviewGainReduction (-1.0f - static_cast<float> (i % 20));
+                panel.createComponentSnapshot (meterArea, true, scale);
+                panel.createComponentSnapshot (knobArea, true, scale);
+            }, 200);
+            std::printf ("render bench @ scale %.2f: full editor %.2f ms/frame, animated regions %.2f ms/frame\n",
+                         scale, full, animated);
+        }
         out.deleteFile();
         juce::FileOutputStream stream (out);
         juce::PNGImageFormat png;

@@ -15,11 +15,16 @@ endif()
 option(HEAT_BUILD_TESTS "Build HEAT unit tests and measurement tools" ON)
 option(HEAT_BUILD_TOOLS "Build the UI snapshot renderer" ON)
 option(HEAT_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
+option(HEAT_SANITIZE_THREAD "Build with ThreadSanitizer" OFF)
 set(HEAT_JUCE_DIR "" CACHE PATH "Path to a local JUCE 8 checkout (fetched automatically when empty)")
 
 if(HEAT_SANITIZE AND NOT MSVC)
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=undefined)
     add_link_options(-fsanitize=address,undefined)
+endif()
+if(HEAT_SANITIZE_THREAD AND NOT MSVC)
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
 endif()
 
 # ----------------------------------------------------------------------------
@@ -181,7 +186,8 @@ if(HEAT_BUILD_TESTS)
         Tests/TestRunner.cpp
         Tests/TestSignals.cpp
         Tests/StateTests.cpp
-        Tests/AutomationTests.cpp)
+        Tests/AutomationTests.cpp
+        Tests/RealtimeTests.cpp)
     target_include_directories(heat_plugin_tests PRIVATE Tests)
     heat_configure_juce_target(heat_plugin_tests)
     add_test(NAME heat_plugin_tests COMMAND heat_plugin_tests)

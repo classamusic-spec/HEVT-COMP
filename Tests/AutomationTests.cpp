@@ -139,13 +139,14 @@ HEAT_TEST ("Automation", "external sidechain through the plugin bus")
 HEAT_TEST ("Automation", "multiple instances are independent")
 {
     TempPresetDir dir;
+    constexpr int totalSamples = 256 * 188; // whole number of 256-sample blocks
     auto render = [&] (HeatAudioProcessor& p, uint32_t seed)
     {
-        juce::AudioBuffer<float> out (2, 48000);
+        juce::AudioBuffer<float> out (2, totalSamples);
         juce::AudioBuffer<float> buffer (p.getTotalNumInputChannels(), 256);
         juce::MidiBuffer midi;
         Noise noise (seed);
-        for (int s = 0; s < 48000; s += 256)
+        for (int s = 0; s < totalSamples; s += 256)
         {
             for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
                 for (int i = 0; i < 256; ++i)
@@ -177,13 +178,13 @@ HEAT_TEST ("Automation", "multiple instances are independent")
         }
         many.back()->prepareToPlay (48000.0, 256);
     }
-    std::vector<juce::AudioBuffer<float>> outs (8, juce::AudioBuffer<float> (2, 48000));
+    std::vector<juce::AudioBuffer<float>> outs (8, juce::AudioBuffer<float> (2, totalSamples));
     std::vector<Noise> noises;
     for (int i = 0; i < 8; ++i)
         noises.emplace_back (i % 2 == 0 ? 5u : 6u);
     juce::AudioBuffer<float> buffer (4, 256);
     juce::MidiBuffer midi;
-    for (int s = 0; s < 48000; s += 256)
+    for (int s = 0; s < totalSamples; s += 256)
         for (int k = 0; k < 8; ++k)
         {
             buffer.setSize (many[static_cast<size_t> (k)]->getTotalNumInputChannels(), 256, false, false, true);
@@ -199,7 +200,7 @@ HEAT_TEST ("Automation", "multiple instances are independent")
     for (int k = 0; k < 8; ++k)
     {
         const auto& ref = k % 2 == 0 ? refA : refB;
-        for (int i = 0; i < 48000; ++i)
+        for (int i = 0; i < totalSamples; ++i)
             worst = std::max (worst, (double) std::abs (outs[static_cast<size_t> (k)].getSample (0, i) - ref.getSample (0, i)));
     }
     note ("8 interleaved instances vs solo renders: max deviation %.2e", worst);
