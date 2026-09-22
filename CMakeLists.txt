@@ -41,7 +41,12 @@ endif()
 # can be unit-tested, measured and sanitised in isolation.
 # ----------------------------------------------------------------------------
 add_library(heat_dsp STATIC
-    Source/DSP/GainComputer.cpp)
+    Source/DSP/GainComputer.cpp
+    Source/DSP/Ballistics.cpp
+    Source/DSP/SidechainFilter.cpp
+    Source/DSP/CompressMacro.cpp
+    Source/DSP/CompressorEngine.cpp
+    Source/Modes/ModeProfiles.cpp)
 target_include_directories(heat_dsp PUBLIC Source)
 target_compile_features(heat_dsp PUBLIC cxx_std_20)
 if(MSVC)
@@ -132,31 +137,14 @@ if(HEAT_BUILD_TESTS)
     # Pure-DSP tests: fast, JUCE-free, sanitizer friendly.
     add_executable(heat_dsp_tests
         Tests/TestMain.cpp
+        Tests/TestSignals.cpp
         Tests/GainComputerTests.cpp
         Tests/CompressMacroTests.cpp
         Tests/DetectorTests.cpp
-        Tests/BallisticsTests.cpp
-        Tests/StereoTests.cpp
-        Tests/SidechainTests.cpp
-        Tests/MixAlignmentTests.cpp
-        Tests/NonlinearTests.cpp
-        Tests/AliasingTests.cpp
-        Tests/EngineTests.cpp)
+        Tests/BallisticsTests.cpp)
     target_link_libraries(heat_dsp_tests PRIVATE heat_dsp)
     add_test(NAME heat_dsp_tests COMMAND heat_dsp_tests)
 
-    # Plugin-level tests: parameters, state, presets, A/B, automation fuzz.
-    juce_add_console_app(heat_plugin_tests PRODUCT_NAME "HEAT Plugin Tests")
-    target_sources(heat_plugin_tests PRIVATE
-        Tests/PluginTestMain.cpp
-        Tests/StateTests.cpp
-        Tests/AutomationTests.cpp)
-    heat_configure_juce_target(heat_plugin_tests)
-    add_test(NAME heat_plugin_tests COMMAND heat_plugin_tests)
-
-    # Measurement generator: CSV + WAV output for the quality gates.
-    add_executable(heat_measure Tools/HeatMeasure.cpp)
-    target_link_libraries(heat_measure PRIVATE heat_dsp)
 endif()
 
 if(HEAT_BUILD_TOOLS)

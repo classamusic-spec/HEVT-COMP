@@ -1,5 +1,7 @@
 #pragma once
 
+#include "DSP/ControlMappings.h"
+
 // Stable, versioned parameter identifiers. These are persisted in DAW sessions
 // and presets: NEVER rename or re-purpose an ID after release. New behaviour
 // gets a new ID (".v3") and a migration path in PluginState.
@@ -30,12 +32,12 @@ namespace heat::ranges
 {
     inline constexpr float gainMinDb     = -24.0f;
     inline constexpr float gainMaxDb     =  24.0f;
-    inline constexpr float attackMinMs   =   0.1f;
-    inline constexpr float attackMaxMs   = 100.0f;
-    inline constexpr float releaseMinMs  =  20.0f;
-    inline constexpr float releaseMaxMs  = 3000.0f;
-    inline constexpr float hpfMinHz      =  20.0f;
-    inline constexpr float hpfMaxHz      = 400.0f;
+    inline constexpr float attackMinMs   = dsp::attackMinMs;
+    inline constexpr float attackMaxMs   = dsp::attackMaxMs;
+    inline constexpr float releaseMinMs  = dsp::releaseMinMs;
+    inline constexpr float releaseMaxMs  = dsp::releaseMaxMs;
+    inline constexpr float hpfMinHz      = dsp::hpfMinHz;
+    inline constexpr float hpfMaxHz      = dsp::hpfMaxHz;
 }
 
 namespace heat
