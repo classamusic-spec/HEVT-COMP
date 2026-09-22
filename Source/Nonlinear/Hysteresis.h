@@ -51,7 +51,7 @@ namespace heat::dsp
         double process (double b) noexcept
         {
             const double db = b - bPrev;
-            if (db != 0.0)
+            if (std::abs (db) > 0.0)
             {
                 const double dir = db > 0.0 ? 1.0 : -1.0;
                 const double s1 = slope (m, bPrev, dir);

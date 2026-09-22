@@ -14,11 +14,130 @@ HEAT_TEST ("State", "parameter IDs are stable")
         "heat.input.v2", "heat.output.v2", "heat.compress.v2", "heat.attack.v2", "heat.release.v2",
         "heat.mode.v2", "heat.detector.v2", "heat.tube.v2", "heat.iron.v2", "heat.mix.v2",
         "heat.sidechain.hpf.v2", "heat.sidechain.source.v2", "heat.sidechain.link.v2",
-        "heat.sidechain.listen.v2", "heat.autoMakeup.v2", "heat.autoRelease.v2", "heat.quality.v2", "heat.bypass.v2"
+        "heat.sidechain.listen.v2", "heat.autoMakeup.v2", "heat.autoRelease.v2", "heat.quality.v2", "heat.bypass.v2",
+        // 2.1 (appended)
+        "heat.stereo.mode.v2", "heat.lookahead.v2", "heat.sidechain.lpf.v2", "heat.sidechain.eq.freq.v2",
+        "heat.sidechain.eq.gain.v2", "heat.sidechain.eq.q.v2", "heat.limiter.v2", "heat.limiter.ceiling.v2",
+        "heat.iron.model.v2", "heat.multiband.v2", "heat.multiband.xover.low.v2", "heat.multiband.xover.high.v2",
+        "heat.multiband.low.v2", "heat.multiband.mid.v2", "heat.multiband.high.v2"
     };
     for (auto* id : expected)
         CHECK (p.getState().getParameter (id) != nullptr);
     CHECK (p.getParameters().size() == static_cast<int> (std::size (expected)));
+
+    // Host parameter order is append-only: 2.0 indices are unchanged.
+    for (int i = 0; i < p.getParameters().size(); ++i)
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (p.getParameters()[i]))
+            CHECK (withId->paramID == expected[i]);
+
+    // Latency-changing controls are not automatable.
+    CHECK (! p.getState().getParameter (heat::ids::lookahead)->isAutomatable());
+    CHECK (! p.getState().getParameter (heat::ids::limiter)->isAutomatable());
+}
+
+HEAT_TEST ("State", "2.0 sessions and presets keep the CLASSIC IRON; new controls start neutral")
+{
+    TempPresetDir dir;
+
+    // A fresh 2.1 instance uses the hysteresis core.
+    HeatAudioProcessor fresh (dir.dir);
+    CHECK (juce::roundToInt (getPlain (fresh, heat::ids::ironModel)) == 1);
+
+    // Build a 2.0 session: version 2, no 2.1 parameters in the trees.
+    HeatAudioProcessor source (dir.dir);
+    setPlain (source, heat::ids::iron, 0.6f);
+    setPlain (source, heat::ids::compress, 0.42f);
+    auto paramTree = source.getState().copyState();
+    for (auto* id : { heat::ids::stereoMode, heat::ids::lookahead, heat::ids::scLpf, heat::ids::scEqFreq,
+                      heat::ids::scEqGain, heat::ids::scEqQ, heat::ids::limiter, heat::ids::ceiling,
+                      heat::ids::ironModel, heat::ids::multiband, heat::ids::xoverLow, heat::ids::xoverHigh,
+                      heat::ids::bandLow, heat::ids::bandMid, heat::ids::bandHigh })
+        paramTree.removeChild (paramTree.getChildWithProperty ("id", id), nullptr);
+    juce::ValueTree root ("HEAT_STATE");
+    root.setProperty ("version", 2, nullptr);
+    root.appendChild (paramTree.createCopy(), nullptr);
+    juce::ValueTree ab ("AB");
+    ab.setProperty ("active", 0, nullptr);
+    for (int s = 0; s < 2; ++s)
+    {
+        juce::ValueTree slot ("SLOT");
+        slot.setProperty ("index", s, nullptr);
+        slot.appendChild (paramTree.createCopy(), nullptr);
+        ab.appendChild (slot, nullptr);
+    }
+    root.appendChild (ab, nullptr);
+    juce::MemoryBlock block;
+    if (auto xml = root.createXml())
+        juce::AudioProcessor::copyXmlToBinary (*xml, block);
+
+    HeatAudioProcessor loaded (dir.dir);
+    setPlain (loaded, heat::ids::multiband, 2.0f);   // must be reset by the load
+    setPlain (loaded, heat::ids::limiter, 1.0f);
+    loaded.setStateInformation (block.getData(), static_cast<int> (block.getSize()));
+    CHECK (juce::roundToInt (getPlain (loaded, heat::ids::ironModel)) == 0);
+    CHECK_NEAR (getPlain (loaded, heat::ids::iron), 0.6, 1.0e-4);
+    CHECK_NEAR (getPlain (loaded, heat::ids::compress), 0.42, 1.0e-4);
+    CHECK (juce::roundToInt (getPlain (loaded, heat::ids::multiband)) == 0);
+    CHECK (juce::roundToInt (getPlain (loaded, heat::ids::limiter)) == 0);
+    CHECK (juce::roundToInt (getPlain (loaded, heat::ids::lookahead)) == 0);
+
+    // The B slot (also 2.0) is migrated too.
+    loaded.switchABSlot (1);
+    CHECK (juce::roundToInt (getPlain (loaded, heat::ids::ironModel)) == 0);
+
+    // A 2.1 round trip keeps HYSTERESIS.
+    juce::MemoryBlock current;
+    fresh.getStateInformation (current);
+    HeatAudioProcessor again (dir.dir);
+    again.setStateInformation (current.getData(), static_cast<int> (current.getSize()));
+    CHECK (juce::roundToInt (getPlain (again, heat::ids::ironModel)) == 1);
+
+    // 2.0 user preset: missing 2.1 controls reset to neutral, IRON stays CLASSIC.
+    auto& pm = loaded.getPresetManager();
+    auto presetTree = pm.createPresetTree ("Old One");
+    presetTree.setProperty ("version", 2, nullptr);
+    for (auto* id : { heat::ids::ironModel, heat::ids::multiband, heat::ids::limiter, heat::ids::scEqGain })
+        presetTree.removeChild (presetTree.getChildWithProperty ("id", id), nullptr);
+    setPlain (loaded, heat::ids::ironModel, 1.0f);
+    setPlain (loaded, heat::ids::multiband, 1.0f);
+    setPlain (loaded, heat::ids::limiter, 1.0f);
+    setPlain (loaded, heat::ids::scEqGain, 9.0f);
+    pm.applyPresetTree (presetTree);
+    CHECK (juce::roundToInt (getPlain (loaded, heat::ids::ironModel)) == 0);
+    CHECK (juce::roundToInt (getPlain (loaded, heat::ids::multiband)) == 0);
+    CHECK (juce::roundToInt (getPlain (loaded, heat::ids::limiter)) == 0);
+    CHECK_NEAR (getPlain (loaded, heat::ids::scEqGain), 0.0, 1.0e-4);
+}
+
+HEAT_TEST ("State", "reported latency follows LOOKAHEAD and LIMITER")
+{
+    TempPresetDir dir;
+    HeatAudioProcessor p (dir.dir);
+    p.prepareToPlay (48000.0, 512);
+    const int core = p.getLatencySamples();
+    CHECK (core == p.getEngineLatency());
+    setPlain (p, heat::ids::lookahead, 4.0f);   // 5 ms
+    CHECK (p.getLatencySamples() == core + 240);
+    setPlain (p, heat::ids::limiter, 1.0f);
+    CHECK (p.getLatencySamples() > core + 240);
+    const int withBoth = p.getLatencySamples();
+    processNoise (p, 512, 512);                  // the engine picks the settings up
+    CHECK (p.getLatencySamples() == p.getEngineLatency());
+
+    // Loading a preset that turns both off brings it back.
+    p.getPresetManager().loadPreset (p.getPresetManager().findByName ("Vocal Glue"));
+    CHECK (p.getLatencySamples() == core);
+
+    // A session restore updates it as well.
+    setPlain (p, heat::ids::lookahead, 4.0f);
+    setPlain (p, heat::ids::limiter, 1.0f);
+    juce::MemoryBlock block;
+    p.getStateInformation (block);
+    HeatAudioProcessor q (dir.dir);
+    q.prepareToPlay (48000.0, 512);
+    q.setStateInformation (block.getData(), static_cast<int> (block.getSize()));
+    CHECK (q.getLatencySamples() == withBoth);
+    note ("48 kHz latency: core %.0f, +5 ms lookahead + limiter %.0f samples", core, withBoth);
 }
 
 HEAT_TEST ("State", "session round trip restores every parameter")

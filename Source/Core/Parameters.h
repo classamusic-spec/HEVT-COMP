@@ -12,6 +12,10 @@ namespace heat
     inline const juce::StringArray scSourceChoices { "INTERNAL", "EXTERNAL" };
     inline const juce::StringArray linkChoices     { "LINKED", "PARTIAL", "DUAL MONO" };
     inline const juce::StringArray qualityChoices  { "NORMAL", "HIGH", "ULTRA" };
+    inline const juce::StringArray stereoModeChoices { "L/R", "M/S", "MID", "SIDE" };
+    inline const juce::StringArray lookaheadChoices  { "OFF", "0.5 ms", "1 ms", "2 ms", "5 ms", "10 ms" };
+    inline const juce::StringArray ironModelChoices  { "CLASSIC", "HYSTERESIS" };
+    inline const juce::StringArray multibandChoices  { "OFF", "2 BAND", "3 BAND" };
 
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -46,5 +50,24 @@ namespace heat
         std::atomic<float>* autoRelease = nullptr;
         std::atomic<float>* quality     = nullptr;
         std::atomic<float>* bypass      = nullptr;
+
+        std::atomic<float>* stereoMode  = nullptr;
+        std::atomic<float>* lookahead   = nullptr;
+        std::atomic<float>* scLpf       = nullptr;
+        std::atomic<float>* scEqFreq    = nullptr;
+        std::atomic<float>* scEqGain    = nullptr;
+        std::atomic<float>* scEqQ       = nullptr;
+        std::atomic<float>* limiter     = nullptr;
+        std::atomic<float>* ceiling     = nullptr;
+        std::atomic<float>* ironModel   = nullptr;
+        std::atomic<float>* multiband   = nullptr;
+        std::atomic<float>* xoverLow    = nullptr;
+        std::atomic<float>* xoverHigh   = nullptr;
+        std::atomic<float>* bandLow     = nullptr;
+        std::atomic<float>* bandMid     = nullptr;
+        std::atomic<float>* bandHigh    = nullptr;
     };
+
+    // LOOKAHEAD choice index → milliseconds.
+    float lookaheadMsForIndex (int index) noexcept;
 }

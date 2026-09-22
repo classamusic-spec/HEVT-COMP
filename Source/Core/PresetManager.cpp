@@ -10,7 +10,11 @@ namespace heat
         // preset so browsing never changes routing or CPU cost.
         const char* const presetParameterIds[] = {
             ids::input, ids::output, ids::compress, ids::attack, ids::release, ids::mode, ids::detector,
-            ids::tube, ids::iron, ids::mix, ids::hpf, ids::scLink, ids::autoMakeup, ids::autoRelease
+            ids::tube, ids::iron, ids::mix, ids::hpf, ids::scLink, ids::autoMakeup, ids::autoRelease,
+            // 2.1
+            ids::stereoMode, ids::lookahead, ids::scLpf, ids::scEqFreq, ids::scEqGain, ids::scEqQ,
+            ids::limiter, ids::ceiling, ids::ironModel, ids::multiband, ids::xoverLow, ids::xoverHigh,
+            ids::bandLow, ids::bandMid, ids::bandHigh
         };
     }
 
@@ -110,6 +114,22 @@ namespace heat
         setParameter (ids::scLink, static_cast<float> (p.link));
         setParameter (ids::autoMakeup, 1.0f);
         setParameter (ids::autoRelease, 0.0f);
+
+        setParameter (ids::stereoMode, static_cast<float> (p.stereoMode));
+        setParameter (ids::lookahead, static_cast<float> (p.lookahead));
+        setParameter (ids::scLpf, p.scLpfHz);
+        setParameter (ids::scEqFreq, p.scEqHz);
+        setParameter (ids::scEqGain, p.scEqDb);
+        setParameter (ids::scEqQ, p.scEqQ);
+        setParameter (ids::limiter, p.limiter ? 1.0f : 0.0f);
+        setParameter (ids::ceiling, p.ceilingDb);
+        setParameter (ids::ironModel, static_cast<float> (p.ironModel));
+        setParameter (ids::multiband, static_cast<float> (p.multiband));
+        setParameter (ids::xoverLow, p.xoverLowHz);
+        setParameter (ids::xoverHigh, p.xoverHighHz);
+        setParameter (ids::bandLow, p.bandLow / 100.0f);
+        setParameter (ids::bandMid, p.bandMid / 100.0f);
+        setParameter (ids::bandHigh, p.bandHigh / 100.0f);
     }
 
     juce::ValueTree PresetManager::createPresetTree (const juce::String& name) const
@@ -138,6 +158,21 @@ namespace heat
                 if (auto* p = state.getParameter (id))
                     p->setValueNotifyingHost (p->convertTo0to1 (static_cast<float> (param.getProperty ("value"))));
             }
+
+        // Controls a preset does not mention (it was saved by an older HEAT)
+        // start from neutral instead of keeping whatever was set before; 2.0
+        // presets keep the CLASSIC IRON they were made with.
+        const int version = static_cast<int> (preset.getProperty ("version", 2));
+        for (auto* id : presetParameterIds)
+        {
+            if (preset.getChildWithProperty ("id", id).isValid())
+                continue;
+            if (auto* p = state.getParameter (id))
+            {
+                const bool legacyIron = version < 3 && juce::String (id) == ids::ironModel;
+                p->setValueNotifyingHost (legacyIron ? 0.0f : p->getDefaultValue());
+            }
+        }
     }
 
     void PresetManager::loadPreset (int index)

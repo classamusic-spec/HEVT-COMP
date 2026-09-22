@@ -1,7 +1,9 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_opengl/juce_opengl.h>
 #include "UI/AdvancedPanel.h"
+#include "UI/GpuMeter.h"
 #include "UI/GainReductionDisplay.h"
 #include "UI/Header.h"
 #include "UI/HeatKnob.h"
@@ -38,8 +40,16 @@ namespace heat::ui
         void onFrame (double elapsedSeconds);
         void setPreviewGainReduction (float db);   // snapshots / previews
         void toggleAdvanced();
+        AdvancedPanel& getAdvancedPanel() noexcept { return advanced; }
+        GainReductionDisplay& getMeter() noexcept { return meter; }
+
+        // GPU meter: the chassis leaves the meter glass transparent and the
+        // meter component draws only its rim and scale overlay.
+        void setGpuHole (bool enabled);
+        bool hasGpuHole() const noexcept { return gpuHole; }
 
         std::function<void (float)> onUiScaleRequest;
+        std::function<void (bool)> onGpuMeterRequest;
 
     private:
         class Scrim;
@@ -61,6 +71,7 @@ namespace heat::ui
 
         HeatKnob* activeKnob = nullptr;
         juce::uint32 lastBlocks = 0;
+        bool gpuHole = false;
     };
 }
 
@@ -76,11 +87,18 @@ public:
 
     heat::ui::MainPanel& getMainPanel() noexcept { return panel; }
 
+    // Attaches / detaches the OpenGL meter. Falls back to the CPU meter if the
+    // context or shader cannot be created.
+    void setGpuMeterEnabled (bool enabled);
+    bool isGpuMeterActive() const noexcept { return gpuActive; }
+    heat::ui::GpuMeterRenderer* getGpuRenderer() noexcept { return gpuRenderer.get(); }
+
     static constexpr int designWidth = 1536;
     static constexpr int designHeight = 1024;
 
 private:
     void applyScale (float scale);
+    void gpuReady (bool ok);
 
     HeatAudioProcessor& processor;
     heat::ui::HeatLookAndFeel lookAndFeel;
@@ -89,6 +107,10 @@ private:
     juce::ComponentBoundsConstrainer constrainer;
     juce::VBlankAttachment vblank;
     double lastFrameTime = 0.0;
+
+    juce::OpenGLContext glContext;
+    std::unique_ptr<heat::ui::GpuMeterRenderer> gpuRenderer;
+    bool gpuActive = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeatAudioProcessorEditor)
 };

@@ -7,7 +7,9 @@
 #include "DSP/HeatEngine.h"
 #include "UI/MeterTelemetry.h"
 
-class HeatAudioProcessor final : public juce::AudioProcessor
+class HeatAudioProcessor final : public juce::AudioProcessor,
+                                 private juce::AudioProcessorValueTreeState::Listener,
+                                 private juce::AsyncUpdater
 {
 public:
     // presetDirectory: override for tests; defaults to the user preset folder.
@@ -56,13 +58,26 @@ public:
     void setUiScale (float s) noexcept { uiScale.store (juce::jlimit (0.5f, 2.0f, s)); }
     bool getPeakHold() const noexcept { return peakHold.load(); }
     void setPeakHold (bool b) noexcept { peakHold.store (b); }
+    bool getGpuMeter() const noexcept { return gpuMeter.load(); }
+    void setGpuMeter (bool b) noexcept { gpuMeter.store (b); }
 
     int getEngineLatency() const noexcept { return engine.getLatencySamples(); }
+
+    // Brings a parameter tree saved by an older HEAT up to the current
+    // stateVersion (e.g. 2.0 sessions keep the CLASSIC IRON model).
+    static void migrateParameterTree (juce::ValueTree& tree, int fromVersion);
 
     static constexpr float defaultUiScale = 0.75f;
 
 private:
     void runEngine (juce::AudioBuffer<float>& buffer, bool forceBypass);
+
+    // LOOKAHEAD / LIMITER change the latency. The host is told on the message
+    // thread (directly, or via an async update when the change arrives on
+    // another thread).
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+    void handleAsyncUpdate() override;
+    void updateReportedLatency();
 
     juce::UndoManager undoManager { 30000, 30 };
     juce::AudioProcessorValueTreeState state;
@@ -74,6 +89,7 @@ private:
 
     std::atomic<float> uiScale { defaultUiScale };
     std::atomic<bool> peakHold { true };
+    std::atomic<bool> gpuMeter { true };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HeatAudioProcessor)
 };

@@ -21,16 +21,57 @@ HeatAudioProcessor::HeatAudioProcessor (juce::File presetDirectory)
     // session overwrite this through setStateInformation().
     presets.loadPreset (std::max (0, presets.findByName (firstRunPreset)));
     undoManager.clearUndoHistory();
+
+    state.addParameterListener (heat::ids::lookahead, this);
+    state.addParameterListener (heat::ids::limiter, this);
 }
 
-HeatAudioProcessor::~HeatAudioProcessor() = default;
+HeatAudioProcessor::~HeatAudioProcessor()
+{
+    state.removeParameterListener (heat::ids::lookahead, this);
+    state.removeParameterListener (heat::ids::limiter, this);
+    cancelPendingUpdate();
+}
+
+void HeatAudioProcessor::updateReportedLatency()
+{
+    const auto p = params.read();
+    setLatencySamples (engine.latencyFor (p.lookaheadMs, p.limiter));
+}
+
+void HeatAudioProcessor::parameterChanged (const juce::String&, float)
+{
+    if (juce::MessageManager::existsAndIsCurrentThread())
+        updateReportedLatency();
+    else
+        triggerAsyncUpdate();
+}
+
+void HeatAudioProcessor::handleAsyncUpdate()
+{
+    updateReportedLatency();
+}
+
+void HeatAudioProcessor::migrateParameterTree (juce::ValueTree& tree, int fromVersion)
+{
+    if (! tree.isValid())
+        return;
+    if (fromVersion < 3 && ! tree.getChildWithProperty ("id", heat::ids::ironModel).isValid())
+    {
+        // HEAT 2.0 only had the CLASSIC IRON: keep old sessions sounding the same.
+        juce::ValueTree param ("PARAM");
+        param.setProperty ("id", heat::ids::ironModel, nullptr);
+        param.setProperty ("value", 0.0f, nullptr);
+        tree.appendChild (param, nullptr);
+    }
+}
 
 void HeatAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     const int channels = std::max (1, getMainBusNumOutputChannels());
     engine.setParams (params.read());
     engine.prepare (sampleRate, samplesPerBlock, channels);
-    setLatencySamples (engine.getLatencySamples());
+    updateReportedLatency();
     telemetry.reset();
 }
 
@@ -161,6 +202,7 @@ void HeatAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     root.setProperty ("presetName", presets.getCurrentName(), nullptr);
     root.setProperty ("uiScale", uiScale.load(), nullptr);
     root.setProperty ("peakHold", peakHold.load(), nullptr);
+    root.setProperty ("gpuMeter", gpuMeter.load(), nullptr);
     root.appendChild (state.copyState(), nullptr);
     root.appendChild (ab.toValueTree (presets.getCurrentName()), nullptr);
 
@@ -179,21 +221,39 @@ void HeatAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
     // Legacy (pre-release) sessions stored the bare parameter tree.
     if (root.hasType (state.state.getType()))
     {
-        state.replaceState (root);
+        auto legacy = root.createCopy();
+        migrateParameterTree (legacy, 1);
+        state.replaceState (legacy);
         return;
     }
 
     if (! root.hasType (stateRootType))
         return;
 
+    const int version = static_cast<int> (root.getProperty ("version", 2));
+
     if (auto paramTree = root.getChildWithName (state.state.getType()); paramTree.isValid())
-        state.replaceState (paramTree.createCopy());
+    {
+        auto copy = paramTree.createCopy();
+        migrateParameterTree (copy, version);
+        state.replaceState (copy);
+    }
 
     if (auto abTree = root.getChildWithName ("AB"); abTree.isValid())
-        ab.fromValueTree (abTree);
+    {
+        auto copy = abTree.createCopy();
+        for (auto slot : copy)
+            if (slot.getNumChildren() > 0)
+            {
+                auto slotState = slot.getChild (0);
+                migrateParameterTree (slotState, version);
+            }
+        ab.fromValueTree (copy);
+    }
 
     uiScale.store (juce::jlimit (0.5f, 2.0f, static_cast<float> (root.getProperty ("uiScale", defaultUiScale))));
     peakHold.store (static_cast<bool> (root.getProperty ("peakHold", true)));
+    gpuMeter.store (static_cast<bool> (root.getProperty ("gpuMeter", true)));
     presets.setCurrentByName (root.getProperty ("presetName").toString());
     undoManager.clearUndoHistory();
 }

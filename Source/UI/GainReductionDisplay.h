@@ -36,18 +36,36 @@ namespace heat::ui
         float getDisplayedDb (int channel) const noexcept { return shown[channel]; }
         float getPeakDb() const noexcept { return peak; }
 
+        // GPU mode: the glass interior (glass, embers, glow, needle) is drawn
+        // by an OpenGL renderer underneath this component; paint() then only
+        // draws the rim around the glass and the scale overlay on top, and
+        // each changed frame is announced through onGpuFrame instead of a
+        // repaint.
+        void setGpuMode (bool enabled);
+        bool isGpuMode() const noexcept { return gpuMode; }
+        std::function<void()> onGpuFrame;
+
         void paint (juce::Graphics& g) override;
         void resized() override;
 
         std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
         static float yForDb (float db); // reference-space y of a GR value
+        static float heatFor (float db); // 0..1 burn intensity of a GR value
+
+        // Shared with the GPU renderer and its verification (reference coordinates).
+        static juce::Rectangle<float> glassBounds();
+        static float glassRadius();
+        static void paintBackground (juce::Graphics& g);
+        static void paintOverlay (juce::Graphics& g);
+        // Everything that moves inside the glass: warmth, bloom, ember columns, rim glow.
+        static void paintDynamic (juce::Graphics& g, float leftDb, float rightDb);
+        // Peak-hold needle on the right column (drawn when peakDb < -0.05).
+        static void paintNeedle (juce::Graphics& g, float peakDb);
 
     private:
         void renderLayers (float pixelScale);
-        void paintBackground (juce::Graphics& g);
-        void paintOverlay (juce::Graphics& g);
-        void paintColumn (juce::Graphics& g, float x0, float x1, float db, bool outerEdgeLeft);
+        static void paintColumn (juce::Graphics& g, float x0, float x1, float db, bool outerEdgeLeft);
 
         juce::Rectangle<float> outerBounds;
         juce::Image background, overlay;
@@ -55,6 +73,7 @@ namespace heat::ui
 
         float shown[2] { 0.0f, 0.0f };
         float peak = 0.0f;
+        bool gpuMode = false;
         double peakHoldTime = 0.0;
         bool peakHold = true;
     };

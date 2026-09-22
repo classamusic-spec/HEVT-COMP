@@ -33,7 +33,9 @@ namespace heat::test
     {
         using namespace heat::ids;
         return { input, output, compress, attack, release, mode, detector, tube, iron, mix, hpf,
-                 scSource, scLink, scListen, autoMakeup, autoRelease, quality, bypass };
+                 scSource, scLink, scListen, autoMakeup, autoRelease, quality, bypass,
+                 stereoMode, lookahead, scLpf, scEqFreq, scEqGain, scEqQ, limiter, ceiling, ironModel,
+                 multiband, xoverLow, xoverHigh, bandLow, bandMid, bandHigh };
     }
 
     inline void processNoise (HeatAudioProcessor& p, int numSamples, int blockSize, uint32_t seed = 1, float gain = 0.5f)

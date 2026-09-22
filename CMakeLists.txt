@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(HEAT VERSION 2.0.0 LANGUAGES C CXX)
+project(HEAT VERSION 2.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,7 +13,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(HEAT_BUILD_TESTS "Build HEAT unit tests and measurement tools" ON)
-option(HEAT_BUILD_TOOLS "Build the UI snapshot renderer" ON)
+option(HEAT_BUILD_TOOLS "Build the UI snapshot renderer and the GPU meter check" ON)
 option(HEAT_SANITIZE "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 option(HEAT_SANITIZE_THREAD "Build with ThreadSanitizer" OFF)
 set(HEAT_JUCE_DIR "" CACHE PATH "Path to a local JUCE 8 checkout (fetched automatically when empty)")
@@ -96,6 +96,8 @@ set(HEAT_PLUGIN_SOURCES
     Source/UI/SegmentedSelector.cpp
     Source/UI/Header.cpp
     Source/UI/AdvancedPanel.cpp
+    Source/UI/AdvancedSlider.cpp
+    Source/UI/GpuMeter.cpp
     Source/UI/Icons.cpp
     Source/Graphics/SilverSurface.cpp)
 
@@ -103,7 +105,8 @@ set(HEAT_JUCE_MODULES
     juce::juce_audio_utils
     juce::juce_audio_processors
     juce::juce_dsp
-    juce::juce_gui_extra)
+    juce::juce_gui_extra
+    juce::juce_opengl)
 
 set(HEAT_JUCE_DEFINITIONS
     JUCE_WEB_BROWSER=0
@@ -207,4 +210,10 @@ if(HEAT_BUILD_TOOLS)
     juce_add_console_app(heat_snapshot PRODUCT_NAME "HEAT Snapshot")
     target_sources(heat_snapshot PRIVATE Tools/HeatSnapshot.cpp)
     heat_configure_juce_target(heat_snapshot)
+
+    # GPU meter verification: renders the OpenGL meter in a real window and
+    # compares its read-back pixels with the CPU meter.
+    juce_add_gui_app(heat_gpucheck PRODUCT_NAME "heat_gpucheck")
+    target_sources(heat_gpucheck PRIVATE Tools/HeatGpuCheck.cpp)
+    heat_configure_juce_target(heat_gpucheck)
 endif()

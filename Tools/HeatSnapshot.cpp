@@ -1,7 +1,10 @@
 // heat_snapshot — renders the HEAT editor headlessly to PNG for visual
 // comparison with design/reference/HEAT_LOCKED_REFERENCE.png.
 //
-//   heat_snapshot <out.png> [scale=1.0] [grDb=-3.66] [state=reference|advanced|clean|bench]
+//   heat_snapshot <out.png> [scale=1.0] [grDb=-3.66]
+//                 [state=reference|advanced|advanced-sidechain|advanced-multiband|advanced-output|clean|bench]
+//
+// Always renders with the CPU meter (the GPU meter is verified by heat_gpucheck).
 
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
@@ -24,6 +27,20 @@ int main (int argc, char** argv)
     int result = 0;
     {
         HeatAudioProcessor processor (presetDir.getFile());
+        processor.setGpuMeter (false);
+        processor.prepareToPlay (48000.0, 512); // real latency in the advanced panel footer
+        if (state == "advanced-multiband")
+        {
+            // Show the page with something to look at.
+            auto set = [&processor] (const char* id, float plain)
+            {
+                auto* p = processor.getState().getParameter (id);
+                p->setValueNotifyingHost (p->convertTo0to1 (plain));
+            };
+            set (heat::ids::multiband, 2.0f);
+            set (heat::ids::bandLow, 1.3f);
+            set (heat::ids::bandHigh, 0.8f);
+        }
         if (state == "clean")
         {
             auto& pm = processor.getPresetManager();
@@ -34,8 +51,15 @@ int main (int argc, char** argv)
         auto* heatEditor = dynamic_cast<HeatAudioProcessorEditor*> (editor.get());
         editor->setSize (juce::roundToInt (1536.0f * scale), juce::roundToInt (1024.0f * scale));
         heatEditor->getMainPanel().setPreviewGainReduction (grDb);
-        if (state == "advanced")
-            heatEditor->getMainPanel().toggleAdvanced();
+        if (state.startsWith ("advanced"))
+        {
+            auto& panel = heatEditor->getMainPanel();
+            using Page = heat::ui::AdvancedPanel::Page;
+            panel.getAdvancedPanel().setPage (state == "advanced-sidechain" ? Page::sidechain
+                                              : state == "advanced-multiband" ? Page::multiband
+                                              : state == "advanced-output" ? Page::output : Page::general);
+            panel.toggleAdvanced();
+        }
 
         const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f);
 

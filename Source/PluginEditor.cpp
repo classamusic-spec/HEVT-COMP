@@ -144,6 +144,7 @@ namespace heat::ui
         advanced.onClose = [this] { toggleAdvanced(); };
         advanced.onPeakHold = [this] (bool b) { meter.setPeakHoldEnabled (b); };
         advanced.onUiScale = [this] (float s) { if (onUiScaleRequest) onUiScaleRequest (s); };
+        advanced.onGpuMeter = [this] (bool b) { if (onGpuMeterRequest) onGpuMeterRequest (b); };
 
         addChildComponent (bubble);
 
@@ -153,8 +154,27 @@ namespace heat::ui
 
     MainPanel::~MainPanel() = default;
 
+    void MainPanel::setGpuHole (bool enabled)
+    {
+        if (gpuHole == enabled)
+            return;
+        gpuHole = enabled;
+        meter.setGpuMode (enabled);
+        repaint (meter.getBounds());
+    }
+
     void MainPanel::paint (juce::Graphics& g)
     {
+        if (gpuHole)
+        {
+            // Leave the meter glass transparent: the GPU layer shows through.
+            juce::Path hole;
+            hole.addRectangle (getLocalBounds().toFloat());
+            hole.addRoundedRectangle (GainReductionDisplay::glassBounds(), GainReductionDisplay::glassRadius());
+            hole.setUsingNonZeroWinding (false);
+            g.reduceClipRegion (hole);
+        }
+
         const float scale = std::max (0.25f, g.getInternalContext().getPhysicalPixelScaleFactor());
         if (chassis.isNull() || std::abs (chassisScale - scale) > 0.01f)
         {
@@ -241,6 +261,8 @@ namespace heat::ui
 
         if (activeKnob == &compress && bubble.isVisible())
             updateBubble();
+        if (advanced.isVisible())
+            advanced.updateLive (dt);
     }
 }
 
@@ -262,6 +284,15 @@ HeatAudioProcessorEditor::HeatAudioProcessorEditor (HeatAudioProcessor& p)
 
     addAndMakeVisible (panel);
     panel.onUiScaleRequest = [this] (float s) { applyScale (s); };
+    panel.onGpuMeterRequest = [this] (bool b) { setGpuMeterEnabled (b); };
+    panel.getMeter().onGpuFrame = [this]
+    {
+        if (gpuRenderer == nullptr)
+            return;
+        auto& m = panel.getMeter();
+        gpuRenderer->setState (m.getDisplayedDb (0), m.getDisplayedDb (1), m.getPeakDb());
+        glContext.triggerRepaint();
+    };
 
     constrainer.setFixedAspectRatio (static_cast<double> (designWidth) / designHeight);
     constrainer.setSizeLimits (designWidth / 2, designHeight / 2, designWidth * 5 / 4, designHeight * 5 / 4);
@@ -270,12 +301,56 @@ HeatAudioProcessorEditor::HeatAudioProcessorEditor (HeatAudioProcessor& p)
 
     setWantsKeyboardFocus (true);
     applyScale (processor.getUiScale());
+    setGpuMeterEnabled (processor.getGpuMeter());
 }
 
 HeatAudioProcessorEditor::~HeatAudioProcessorEditor()
 {
+    setGpuMeterEnabled (false);
     tooltips.setLookAndFeel (nullptr);
     setLookAndFeel (nullptr);
+}
+
+void HeatAudioProcessorEditor::setGpuMeterEnabled (bool enabled)
+{
+    if (enabled == (gpuRenderer != nullptr))
+        return;
+
+    if (! enabled)
+    {
+        gpuActive = false;
+        panel.setGpuHole (false);
+        glContext.detach();
+        gpuRenderer.reset();
+        return;
+    }
+
+    gpuRenderer = std::make_unique<heat::ui::GpuMeterRenderer> (glContext);
+    juce::Component::SafePointer<HeatAudioProcessorEditor> safe (this);
+    gpuRenderer->onReady = [safe] (bool ok)
+    {
+        juce::MessageManager::callAsync ([safe, ok] { if (safe != nullptr) safe->gpuReady (ok); });
+    };
+    gpuRenderer->setPlacement (static_cast<float> (getWidth()) / static_cast<float> (designWidth), getWidth(), getHeight());
+    glContext.setRenderer (gpuRenderer.get());
+    glContext.setComponentPaintingEnabled (true);
+    glContext.setContinuousRepainting (false);
+    glContext.attachTo (*this);
+}
+
+void HeatAudioProcessorEditor::gpuReady (bool ok)
+{
+    if (gpuRenderer == nullptr)
+        return;
+    if (! ok)
+    {
+        // No usable OpenGL here: stay on the CPU meter.
+        setGpuMeterEnabled (false);
+        return;
+    }
+    gpuActive = true;
+    panel.setGpuHole (true);
+    repaint();
 }
 
 void HeatAudioProcessorEditor::applyScale (float scale)
@@ -286,6 +361,8 @@ void HeatAudioProcessorEditor::applyScale (float scale)
 
 void HeatAudioProcessorEditor::paint (juce::Graphics& g)
 {
+    if (panel.hasGpuHole())
+        g.excludeClipRegion (getLocalArea (&panel, heat::ui::GainReductionDisplay::glassBounds()).toNearestInt());
     g.fillAll (juce::Colour (0xff57585a));
 }
 
@@ -295,6 +372,11 @@ void HeatAudioProcessorEditor::resized()
     panel.setTransform (juce::AffineTransform::scale (scale));
     panel.setBounds (0, 0, designWidth, designHeight);
     processor.setUiScale (scale);
+    if (gpuRenderer != nullptr)
+    {
+        gpuRenderer->setPlacement (scale, getWidth(), getHeight());
+        glContext.triggerRepaint();
+    }
 }
 
 bool HeatAudioProcessorEditor::keyPressed (const juce::KeyPress& key)

@@ -31,6 +31,12 @@ namespace heat
             accumulateMax (outputPeak, t.outputPeak);
             oversamplingFactor.store (t.oversamplingFactor, std::memory_order_relaxed);
             colourActive.store (t.colourPathActive, std::memory_order_relaxed);
+            accumulateMin (limiterGrDb, t.limiterGrDb);
+            for (int b = 0; b < 3; ++b)
+                accumulateMin (bandGrDb[b], t.bandGrDb[b]);
+            multibandActive.store (t.multibandActive, std::memory_order_relaxed);
+            midSideActive.store (t.midSideActive, std::memory_order_relaxed);
+            latencySamples.store (t.latencySamples, std::memory_order_relaxed);
             blocks.fetch_add (1, std::memory_order_release);
         }
 
@@ -41,6 +47,11 @@ namespace heat
         }
 
         float consumeInputPeak() noexcept  { return inputPeak.exchange (0.0f, std::memory_order_acq_rel); }
+        float consumeLimiterGrDb() noexcept { return limiterGrDb.exchange (0.0f, std::memory_order_acq_rel); }
+        float consumeBandGrDb (int band) noexcept { return bandGrDb[band].exchange (0.0f, std::memory_order_acq_rel); }
+        bool isMultibandActive() const noexcept { return multibandActive.load (std::memory_order_relaxed); }
+        bool isMidSideActive() const noexcept { return midSideActive.load (std::memory_order_relaxed); }
+        int getLatencySamples() const noexcept { return latencySamples.load (std::memory_order_relaxed); }
         float consumeOutputPeak() noexcept { return outputPeak.exchange (0.0f, std::memory_order_acq_rel); }
 
         float getCurrentGrDb (int channel) const noexcept { return currentGrDb[channel].load (std::memory_order_relaxed); }
@@ -63,6 +74,9 @@ namespace heat
             }
             inputPeak.store (0.0f);
             outputPeak.store (0.0f);
+            limiterGrDb.store (0.0f);
+            for (auto& b : bandGrDb)
+                b.store (0.0f);
         }
 
     private:
@@ -89,6 +103,10 @@ namespace heat
         std::atomic<float> inputPeak { 0.0f }, outputPeak { 0.0f };
         std::atomic<int> oversamplingFactor { 1 };
         std::atomic<bool> colourActive { false };
+        std::atomic<float> limiterGrDb { 0.0f };
+        std::atomic<float> bandGrDb[3] { 0.0f, 0.0f, 0.0f };
+        std::atomic<bool> multibandActive { false }, midSideActive { false };
+        std::atomic<int> latencySamples { 0 };
         std::atomic<uint32_t> blocks { 0 };
 
         static_assert (std::atomic<float>::is_always_lock_free, "float atomics must be lock-free");

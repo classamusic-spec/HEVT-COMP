@@ -18,13 +18,24 @@ namespace heat::ui
             return juce::Colour::fromRGBA ((juce::uint8) r, (juce::uint8) g, (juce::uint8) b, (juce::uint8) juce::roundToInt (a * 255.0f));
         }
 
-        // How "hot" the meter burns for a given reduction: dark at rest,
-        // gentle for light glue, fully lit from 3 dB.
-        float heatFor (float db)
-        {
-            const float x = juce::jlimit (0.0f, 1.0f, -db / 3.0f);
-            return x * x * (3.0f - 2.0f * x);
-        }
+    }
+
+    // How "hot" the meter burns for a given reduction: dark at rest, gentle
+    // for light glue, fully lit from 3 dB.
+    float GainReductionDisplay::heatFor (float db)
+    {
+        const float x = juce::jlimit (0.0f, 1.0f, -db / 3.0f);
+        return x * x * (3.0f - 2.0f * x);
+    }
+
+    juce::Rectangle<float> GainReductionDisplay::glassBounds()
+    {
+        return meterOuter.reduced (meterRim);
+    }
+
+    float GainReductionDisplay::glassRadius()
+    {
+        return meterOuterRadius - meterRim;
     }
 
     float GainReductionDisplay::yForDb (float db)
@@ -66,13 +77,28 @@ namespace heat::ui
         repaint();
     }
 
+    void GainReductionDisplay::setGpuMode (bool enabled)
+    {
+        if (gpuMode == enabled)
+            return;
+        gpuMode = enabled;
+        background = {};
+        overlay = {};
+        repaint();
+        if (gpuMode && onGpuFrame)
+            onGpuFrame();
+    }
+
     void GainReductionDisplay::setImmediate (float leftDb, float rightDb, float peakDb)
     {
         shown[0] = std::min (0.0f, leftDb);
         shown[1] = std::min (0.0f, rightDb);
         peak = std::min ({ 0.0f, peakDb, shown[0], shown[1] });
         peakHoldTime = 0.0;
-        repaint();
+        if (gpuMode && onGpuFrame)
+            onGpuFrame();
+        else
+            repaint();
     }
 
     void GainReductionDisplay::pushFrame (float deepestLeftDb, float deepestRightDb, double dt)
@@ -112,7 +138,10 @@ namespace heat::ui
 
         if (changed)
         {
-            repaint();
+            if (gpuMode && onGpuFrame)
+                onGpuFrame();
+            else
+                repaint();
             if (auto* h = getAccessibilityHandler())
                 h->notifyAccessibilityEvent (juce::AccessibilityEvent::valueChanged);
         }
@@ -131,6 +160,15 @@ namespace heat::ui
         {
             juce::Graphics g (background);
             g.addTransform (toRef);
+            if (gpuMode)
+            {
+                // Leave the glass interior clear: the GPU layer shows through.
+                juce::Path hole;
+                hole.addRectangle (meterOuter.expanded (margin));
+                hole.addRoundedRectangle (glassBounds(), glassRadius());
+                hole.setUsingNonZeroWinding (false);
+                g.reduceClipRegion (hole);
+            }
             paintBackground (g);
         }
         overlay = juce::Image (juce::Image::ARGB, w, h, true);
@@ -143,7 +181,7 @@ namespace heat::ui
 
     void GainReductionDisplay::paintBackground (juce::Graphics& g)
     {
-        const auto outer = outerBounds;
+        const auto outer = meterOuter;
         const auto glass = outer.reduced (meterRim);
 
         // Soft outer shadow on the panel.
@@ -335,6 +373,69 @@ namespace heat::ui
         g.setOpacity (1.0f);
     }
 
+    void GainReductionDisplay::paintDynamic (juce::Graphics& g, float leftDb, float rightDb)
+    {
+        juce::Graphics::ScopedSaveState s (g);
+        const auto glass = glassBounds();
+        juce::Path glassPath;
+        glassPath.addRoundedRectangle (glass, glassRadius());
+        g.reduceClipRegion (glassPath);
+
+        const float k = heatFor (std::min (leftDb, rightDb));
+
+        // Faint warmth pooled at the base of the glass.
+        if (k > 0.001f)
+        {
+            const float spillTop = yForDb (std::min (leftDb, rightDb));
+            juce::ColourGradient spill (rgb (150, 95, 68, 0.0f), 0.0f, spillTop,
+                                        rgb (150, 95, 68, 0.30f * k), 0.0f, glass.getBottom(), false);
+            g.setGradientFill (spill);
+            g.fillRect (juce::Rectangle<float> (glass.getX(), spillTop, glass.getWidth(), glass.getBottom() - spillTop));
+
+            // Bloom hugging each burning column.
+            for (auto [x0, x1] : { std::pair<float, float> { meterLeftBarX0, meterScaleX0 }, { meterScaleX1, meterRightBarX1 } })
+            {
+                const float top = yForDb (x0 < 700.0f ? leftDb : rightDb) + 30.0f;
+                for (int i = 1; i <= 3; ++i)
+                {
+                    const float e = 3.5f * static_cast<float> (i);
+                    juce::ColourGradient bloom (rgb (255, 130, 60, 0.0f), 0.0f, top, rgb (255, 130, 60, 0.07f * k), 0.0f, meterColumnBottom, false);
+                    g.setGradientFill (bloom);
+                    g.fillRoundedRectangle (juce::Rectangle<float> (x0 - e, top, x1 - x0 + 2 * e, meterColumnBottom - top + e), 9.0f + e);
+                }
+            }
+        }
+
+        paintColumn (g, meterLeftBarX0, meterScaleX0, leftDb, true);
+        paintColumn (g, meterScaleX1, meterRightBarX1, rightDb, false);
+
+        // Rim reflection of the glow.
+        if (k > 0.001f)
+        {
+            juce::Path rimLine;
+            rimLine.addRoundedRectangle (glass.reduced (0.8f), glassRadius() - 0.8f);
+            juce::ColourGradient rg (rgb (255, 160, 90, 0.05f * k), 0.0f, glass.getY(),
+                                     rgb (255, 200, 150, 0.85f * k), 0.0f, glass.getBottom(), false);
+            rg.addColour (0.45, rgb (255, 150, 80, 0.35f * k));
+            g.setGradientFill (rg);
+            g.strokePath (rimLine, juce::PathStrokeType (1.6f));
+        }
+    }
+
+    void GainReductionDisplay::paintNeedle (juce::Graphics& g, float peakDb)
+    {
+        if (peakDb >= -0.05f)
+            return;
+        const float y = yForDb (peakDb);
+        const float x0 = meterScaleX1 + 1.5f, x1 = meterRightBarX1 - 1.0f;
+        g.setColour (rgb (255, 140, 60, 0.18f));
+        g.fillRect (juce::Rectangle<float> (x0, y - 5.0f, x1 - x0, 10.0f));
+        g.setColour (rgb (255, 150, 70, 0.45f));
+        g.fillRect (juce::Rectangle<float> (x0, y - 2.2f, x1 - x0, 4.4f));
+        g.setColour (rgb (255, 242, 224));
+        g.fillRoundedRectangle (juce::Rectangle<float> (x0, y - 1.1f, x1 - x0, 2.2f), 1.1f);
+    }
+
     void GainReductionDisplay::paint (juce::Graphics& g)
     {
         const float scale = std::max (0.25f, g.getInternalContext().getPhysicalPixelScaleFactor());
@@ -344,71 +445,21 @@ namespace heat::ui
         const auto toLocal = juce::AffineTransform::scale (1.0f / cachedScale);
         g.drawImageTransformed (background, toLocal);
 
+        const auto toRef = juce::AffineTransform::translation (-static_cast<float> (getX()), -static_cast<float> (getY()));
+        if (! gpuMode)
         {
             juce::Graphics::ScopedSaveState s (g);
-            g.addTransform (juce::AffineTransform::translation (-static_cast<float> (getX()), -static_cast<float> (getY())));
-
-            const auto glass = outerBounds.reduced (meterRim);
-            juce::Path glassPath;
-            glassPath.addRoundedRectangle (glass, meterOuterRadius - meterRim);
-            g.reduceClipRegion (glassPath);
-
-            const float k = heatFor (std::min (shown[0], shown[1]));
-
-            // Faint warmth pooled at the base of the glass.
-            if (k > 0.001f)
-            {
-                const float spillTop = yForDb (std::min (shown[0], shown[1]));
-                juce::ColourGradient spill (rgb (150, 95, 68, 0.0f), 0.0f, spillTop,
-                                            rgb (150, 95, 68, 0.30f * k), 0.0f, glass.getBottom(), false);
-                g.setGradientFill (spill);
-                g.fillRect (juce::Rectangle<float> (glass.getX(), spillTop, glass.getWidth(), glass.getBottom() - spillTop));
-
-                // Bloom hugging each burning column.
-                for (auto [x0, x1] : { std::pair<float, float> { meterLeftBarX0, meterScaleX0 }, { meterScaleX1, meterRightBarX1 } })
-                {
-                    const float top = yForDb (x0 < 700.0f ? shown[0] : shown[1]) + 30.0f;
-                    for (int i = 1; i <= 3; ++i)
-                    {
-                        const float e = 3.5f * static_cast<float> (i);
-                        juce::ColourGradient bloom (rgb (255, 130, 60, 0.0f), 0.0f, top, rgb (255, 130, 60, 0.07f * k), 0.0f, meterColumnBottom, false);
-                        g.setGradientFill (bloom);
-                        g.fillRoundedRectangle (juce::Rectangle<float> (x0 - e, top, x1 - x0 + 2 * e, meterColumnBottom - top + e), 9.0f + e);
-                    }
-                }
-            }
-
-            paintColumn (g, meterLeftBarX0, meterScaleX0, shown[0], true);
-            paintColumn (g, meterScaleX1, meterRightBarX1, shown[1], false);
-
-            // Rim reflection of the glow.
-            if (k > 0.001f)
-            {
-                juce::Path rimLine;
-                rimLine.addRoundedRectangle (glass.reduced (0.8f), meterOuterRadius - meterRim - 0.8f);
-                juce::ColourGradient rg (rgb (255, 160, 90, 0.05f * k), 0.0f, glass.getY(),
-                                         rgb (255, 200, 150, 0.85f * k), 0.0f, glass.getBottom(), false);
-                rg.addColour (0.45, rgb (255, 150, 80, 0.35f * k));
-                g.setGradientFill (rg);
-                g.strokePath (rimLine, juce::PathStrokeType (1.6f));
-            }
+            g.addTransform (toRef);
+            paintDynamic (g, shown[0], shown[1]);
         }
 
         g.drawImageTransformed (overlay, toLocal);
 
-        // Peak-hold needle on the right column.
-        if (peak < -0.05f)
+        if (! gpuMode)
         {
             juce::Graphics::ScopedSaveState s (g);
-            g.addTransform (juce::AffineTransform::translation (-static_cast<float> (getX()), -static_cast<float> (getY())));
-            const float y = yForDb (peak);
-            const float x0 = meterScaleX1 + 1.5f, x1 = meterRightBarX1 - 1.0f;
-            g.setColour (rgb (255, 140, 60, 0.18f));
-            g.fillRect (juce::Rectangle<float> (x0, y - 5.0f, x1 - x0, 10.0f));
-            g.setColour (rgb (255, 150, 70, 0.45f));
-            g.fillRect (juce::Rectangle<float> (x0, y - 2.2f, x1 - x0, 4.4f));
-            g.setColour (rgb (255, 242, 224));
-            g.fillRoundedRectangle (juce::Rectangle<float> (x0, y - 1.1f, x1 - x0, 2.2f), 1.1f);
+            g.addTransform (toRef);
+            paintNeedle (g, peak);
         }
     }
 
