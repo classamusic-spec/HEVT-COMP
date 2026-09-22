@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 
 #if defined(__SSE__) || defined(_M_X64) || defined(_M_IX86)
  #include <xmmintrin.h>
@@ -43,6 +44,12 @@ namespace heat::dsp
     inline T lerp (T a, T b, T t) noexcept { return a + (b - a) * t; }
 
     inline float clamp01 (float x) noexcept { return std::clamp (x, 0.0f, 1.0f); }
+
+    // Exact float comparison (for "has this value changed at all" checks).
+    inline bool exactlyEqual (float a, float b) noexcept
+    {
+        return std::equal_to<float>() (a, b);
+    }
 
     inline bool isFiniteSample (float x) noexcept
     {
@@ -109,7 +116,7 @@ namespace heat::dsp
             return current;
         }
 
-        bool isSmoothing() const noexcept { return current != target; }
+        bool isSmoothing() const noexcept { return ! exactlyEqual (current, target); }
 
     private:
         float coeff = 0.0f;
@@ -135,7 +142,7 @@ namespace heat::dsp
 
         void setTarget (float value) noexcept
         {
-            if (value == target)
+            if (exactlyEqual (value, target))
                 return;
             target = value;
             remaining = rampSamples;

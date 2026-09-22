@@ -78,7 +78,10 @@ juce_add_binary_data(HeatBinaryData
 set(HEAT_PLUGIN_SOURCES
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
-    Source/Core/Parameters.cpp)
+    Source/Core/Parameters.cpp
+    Source/Core/PluginState.cpp
+    Source/Core/PresetManager.cpp
+    Source/Core/FactoryPresets.cpp)
 
 set(HEAT_JUCE_MODULES
     juce::juce_audio_utils
@@ -141,6 +144,7 @@ if(HEAT_BUILD_TESTS)
     # Pure-DSP tests: fast, JUCE-free, sanitizer friendly.
     add_executable(heat_dsp_tests
         Tests/TestMain.cpp
+        Tests/TestRunner.cpp
         Tests/TestSignals.cpp
         Tests/GainComputerTests.cpp
         Tests/CompressMacroTests.cpp
@@ -160,6 +164,18 @@ if(HEAT_BUILD_TESTS)
     add_executable(heat_measure Tools/HeatMeasure.cpp Tests/TestSignals.cpp Tests/StageHarness.cpp)
     target_include_directories(heat_measure PRIVATE Tests)
     target_link_libraries(heat_measure PRIVATE heat_dsp)
+
+    # Plugin-level tests: parameters, state, presets, A/B, automation fuzz.
+    juce_add_console_app(heat_plugin_tests PRODUCT_NAME "HEAT Plugin Tests")
+    target_sources(heat_plugin_tests PRIVATE
+        Tests/PluginTestMain.cpp
+        Tests/TestRunner.cpp
+        Tests/TestSignals.cpp
+        Tests/StateTests.cpp
+        Tests/AutomationTests.cpp)
+    target_include_directories(heat_plugin_tests PRIVATE Tests)
+    heat_configure_juce_target(heat_plugin_tests)
+    add_test(NAME heat_plugin_tests COMMAND heat_plugin_tests)
 
 endif()
 
