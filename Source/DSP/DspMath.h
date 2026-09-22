@@ -45,6 +45,14 @@ namespace heat::dsp
 
     inline float clamp01 (float x) noexcept { return std::clamp (x, 0.0f, 1.0f); }
 
+    // C1-smooth 0..1 ramp shape (zero slope at both ends). Applied to linear
+    // fade positions so a cross-fade never puts a corner into the waveform.
+    inline float smoothstep (float u) noexcept
+    {
+        u = clamp01 (u);
+        return u * u * (3.0f - 2.0f * u);
+    }
+
     // Exact float comparison (for "has this value changed at all" checks).
     inline bool exactlyEqual (float a, float b) noexcept
     {

@@ -15,7 +15,8 @@ namespace heat::test
     // Runs one nonlinear stage in isolation at a given oversampling factor
     // (1 = no oversampling) exactly as the engine does: up → stage → down.
     inline std::vector<float> runStage (StageKind kind, float amount, const std::vector<float>& in,
-                                        double fs, int factor)
+                                        double fs, int factor,
+                                        dsp::IronModel ironModel = dsp::IronModel::classic)
     {
         const int n = static_cast<int> (in.size());
         std::vector<float> out (in.size());
@@ -28,6 +29,7 @@ namespace heat::test
         iron.prepare (osRate);
         tube.setAmount (amount);
         iron.setAmount (amount);
+        iron.setModelImmediate (ironModel);
 
         auto processSample = [&] (float v)
         {

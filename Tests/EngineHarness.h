@@ -85,11 +85,24 @@ namespace heat::test
     inline double maxSecondDifference (const std::vector<float>& x, int start, int end)
     {
         double m = 0.0;
+        end = std::min (end, static_cast<int> (x.size()));
         for (int i = std::max (2, start); i < end; ++i)
         {
             const auto k = static_cast<size_t> (i);
             m = std::max (m, (double) std::abs (x[k] - 2.0f * x[k - 1] + x[k - 2]));
         }
         return m;
+    }
+
+    // Click measure around a parameter change at sample `at`: the largest
+    // second difference during the transition (`window` samples) relative to
+    // the steady state on both sides of it. A pure level or timbre change
+    // stays ≤ ~1 (it moves between the two); a discontinuity spikes above.
+    inline double clickRatio (const std::vector<float>& x, int at, int window)
+    {
+        const double before = maxSecondDifference (x, at - 6000, at - 500);
+        const double after = maxSecondDifference (x, at + window + 500, at + window + 6000);
+        const double during = maxSecondDifference (x, at - 256, at + window);
+        return during / std::max (1.0e-12, std::max (before, after));
     }
 }

@@ -62,6 +62,8 @@ namespace heat::dsp
             w.prepare (sampleRate, detectorFadeMs);
 
         linkAmount.prepare (sampleRate, linkFadeMs);
+        for (auto& w : linkInclude)
+            w.prepare (sampleRate, linkFadeMs);
 
         snapToControls (controls);
         reset();
@@ -104,6 +106,8 @@ namespace heat::dsp
             detWeight[d].setTarget (static_cast<int> (c.detector) == d ? 1.0f : 0.0f);
 
         linkAmount.setTarget (linkAmountFor (c.link));
+        for (int ch = 0; ch < maxChannels; ++ch)
+            linkInclude[ch].setTarget (c.linkInclude[ch] ? 1.0f : 0.0f);
 
         timingTarget = CompressMacro::ballistics (c.mode, c.detector, c.attackMs, c.releaseMs, c.autoRelease);
     }
@@ -127,6 +131,8 @@ namespace heat::dsp
         for (auto& w : detWeight)
             w.reset (w.getTarget());
         linkAmount.reset (linkAmount.getTarget());
+        for (auto& w : linkInclude)
+            w.reset (w.getTarget());
 
         timing = timingTarget;
         for (auto& b : ballistics)
@@ -163,7 +169,11 @@ namespace heat::dsp
 
             if (numChannels == 2)
             {
-                const float linked = std::max (level[0], level[1]);
+                // An excluded channel is pushed far below the other before the max.
+                constexpr float excludedDb = -200.0f;
+                const float i0 = linkInclude[0].next(), i1 = linkInclude[1].next();
+                const float linked = std::max (level[0] + (1.0f - i0) * excludedDb,
+                                               level[1] + (1.0f - i1) * excludedDb);
                 level[0] += link * (linked - level[0]);
                 level[1] += link * (linked - level[1]);
             }

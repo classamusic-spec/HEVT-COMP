@@ -52,6 +52,8 @@ add_library(heat_dsp STATIC
     Source/DSP/CompressMacro.cpp
     Source/DSP/CompressorEngine.cpp
     Source/DSP/HeatEngine.cpp
+    Source/DSP/Multiband.cpp
+    Source/DSP/TruePeakLimiter.cpp
     Source/Modes/ModeProfiles.cpp
     Source/Nonlinear/TubeStage.cpp
     Source/Nonlinear/IronStage.cpp
@@ -170,7 +172,14 @@ if(HEAT_BUILD_TESTS)
         Tests/EngineTests.cpp
         Tests/StageHarness.cpp
         Tests/NonlinearTests.cpp
-        Tests/AliasingTests.cpp)
+        Tests/AliasingTests.cpp
+        Tests/LookaheadTests.cpp
+        Tests/MidSideTests.cpp
+        Tests/SidechainEqTests.cpp
+        Tests/LimiterTests.cpp
+        Tests/MultibandTests.cpp
+        Tests/HysteresisTests.cpp
+        Tests/FeatureMatrixTests.cpp)
     target_link_libraries(heat_dsp_tests PRIVATE heat_dsp)
     add_test(NAME heat_dsp_tests COMMAND heat_dsp_tests)
 

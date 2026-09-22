@@ -31,6 +31,10 @@ namespace heat::dsp
             StereoLink link = StereoLink::linked;
             bool autoRelease = false;
             bool autoMakeup = true;
+            // Channels that take part in the stereo link. A channel whose gain
+            // is not used (the unprocessed side in MID / SIDE only) is left out
+            // so it cannot drive the processed one. Changes fade over 25 ms.
+            bool linkInclude[maxChannels] { true, true };
         };
 
         struct Outputs
@@ -77,6 +81,7 @@ namespace heat::dsp
         OnePoleSmoother thr, slope, knee, makeupFactor, colorDrive, colorGrInteraction, colorBias, softening;
         LinearSmoother detWeight[numDetectors];
         LinearSmoother linkAmount;
+        LinearSmoother linkInclude[maxChannels];
 
         // Timing smoothing (per block).
         BallisticsSettings timing, timingTarget;
