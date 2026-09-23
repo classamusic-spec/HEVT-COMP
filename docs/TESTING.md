@@ -69,6 +69,16 @@ a discontinuity spikes above; the limit is 1.3.
 
 ## Sanitizers
 
+2.1 (final build):
+
+| Build | Command | Result |
+|---|---|---|
+| ASan + UBSan (GCC, `-DHEAT_SANITIZE=ON`, RelWithDebInfo) | `heat_dsp_tests` | 89 tests, 2730 checks, 0 failed, **no sanitizer reports** |
+| ASan + UBSan | `xvfb-run -a heat_plugin_tests` | 17 tests, 1412 checks, 0 failed, **no sanitizer reports** |
+| TSan (GCC, `-DHEAT_SANITIZE_THREAD=ON`, RelWithDebInfo) | `xvfb-run -a heat_plugin_tests` (full suite incl. the concurrency test) | 17 tests, 1412 checks, 0 failed, **0 ThreadSanitizer reports** |
+
+2.0:
+
 | Build | Command | Result |
 |---|---|---|
 | ASan + UBSan (GCC, `-DHEAT_SANITIZE=ON`, RelWithDebInfo) | `heat_dsp_tests` | 55 tests, 2446 checks, 0 failed, **no sanitizer reports** |
@@ -92,10 +102,15 @@ build uses GCC 13 (`-DCMAKE_CXX_COMPILER=g++ -DHEAT_SANITIZE_THREAD=ON`).
 ## Plug-in validation
 
 `pluginval 1.0.4 --strictness-level 10 --validate-in-process` on the Release
-VST3, under Xvfb so the editor tests run: **SUCCESS** — all 25 test groups passed (plugin info, open cold / warm,
-programs, editor, open editor whilst processing, audio processing,
-non-releasing processing, state, automation, editor automation, parameter
-thread safety, fuzz parameters, bus tests, background-thread state, …).
+VST3, under Xvfb so the editor tests run (2.1: with the OpenGL meter
+enabled, as shipped): **SUCCESS** — all 25 test groups passed (plugin info,
+open cold / warm, programs, editor, open editor whilst processing, audio
+processing, non-releasing processing, state, automation, editor automation,
+parameter thread safety, fuzz parameters, bus tests, background-thread
+state, …). Same result for 2.0.
+
+`heat_gpucheck` on the final build: glass mean difference 0.68 / 255
+(p99 4), whole composited editor 0.14 / 255 (p99 2): PASS.
 
 ## Realtime safety by design
 
@@ -146,4 +161,16 @@ thread safety, fuzz parameters, bus tests, background-thread state, …).
   The CMake project configures AU on Apple; only Linux VST3 and Standalone
   were built and validated.
 * **GPU-accelerated rendering / real display refresh** — the benchmark uses
-  JUCE's software renderer under Xvfb.
+  JUCE's software renderer under Xvfb, and `heat_gpucheck` runs on Mesa's
+  software OpenGL. Hardware GPU timing and HiDPI GL rendering:
+  `UNVERIFIED — ENVIRONMENT LIMITATION`.
+
+## Known limitations (2.1)
+
+* **Limiter true peak near Nyquist** — programme with loud energy at
+  21–24 kHz (48 kHz) can overshoot the ceiling by up to +0.98 dBTP; 20 kHz
+  band-limited programme stays within +0.04 dB (`LIMITER.md`).
+* **OpenGL dependency on Linux** — the plug-in now links `juce_opengl`, so
+  the Linux VST3 / Standalone need `libGL.so.1` at load time (present on any
+  desktop system; a headless box without Mesa/libglvnd will fail to load
+  it). Without a working context the meter falls back to the CPU renderer.
