@@ -173,3 +173,103 @@ Built as the JUCE-free `heat_dsp` library and tested in isolation.
 * Documentation: product spec, DSP architecture, macro, gain computer,
   detectors, ballistics, program dependence, tube, iron, oversampling, UI
   system, parameters, testing, quality gates, README.
+
+---
+
+# HEAT 2.1 — the "next version" list
+
+Requested: mid/side and look-ahead, sidechain EQ beyond the HPF, an output
+limiter, a proper transformer hysteresis model for IRON, a multiband option,
+GPU-backed meter rendering. Same discipline as 2.0: DSP proven by tests
+before the UI, then the plug-in layer, then validation.
+
+## Phase 20 — DSP
+
+Design decisions:
+
+* **Front panel untouched.** Everything lives behind the gear; the
+  reference render is pixel-identical to 2.0 (max difference 0).
+* **Latency on request.** LOOKAHEAD and the LIMITER add latency; all
+  latency-dependent paths (look-ahead, SC listen, limiter, bypass) became
+  `CrossfadeDelay`s that move taps with a cross-fade. Both controls are
+  non-automatable; the host is told from the message thread.
+* **M/S as a rotation.** A scaled rotation of the L/R plane morphs between
+  L/R and M/S without ever being singular (a linear blend of the two
+  matrices is singular at t ≈ 0.59), so mode changes can glide instead of
+  jump. The decode uses the morph position delayed by the core latency.
+* **Multiband that respects MIX.** Re-summing Linkwitz–Riley bands gives an
+  allpass; mixed with dry at 50 % it cancels completely at each crossover.
+  HEAT splits only the detector; the audio gets dynamic SVF shelves that are
+  exactly the identity when band gains are equal.
+* **True-peak limiter** with a sliding-minimum + box look-ahead (sample
+  ceiling guaranteed by construction).
+* **IRON hysteresis**: inverse Jiles–Atherton (B-driven, as a voltage-driven
+  transformer is), irreversible term written with M_irr eliminated so the
+  susceptibility can never go negative.
+
+Calibration of the J–A core (scratch sweeps): the first parameter set
+(a = 0.35, k = 0.12) was a weakly magnetic core (μ ≈ 1.3) whose THD barely
+rose at high level; a high-permeability set (a = k = 0.03, c = 0.4, μi ≈ 5.4)
+gives a Rayleigh region at low level, a proper saturation knee and the same
+weight as CLASSIC at the reference level (drive 1 + 3a, depth 0.055a).
+
+Problems found and fixed:
+
+* **Click tests failed on fades.** Linear crossfades leave slope kinks
+  (−64 dB second-difference spikes). All new fades use smoothstep. The M/S
+  "click" and the multiband "click" were partly level changes (a quiet
+  presence tone gets louder once the bass stops ducking it); the click
+  metric now compares against the steady state on both sides of a change.
+* **Limiter true-peak overshoot +0.47 dB** on noise hits with 4x / 16-tap
+  detection → 8x / 48-tap detection (+0.12 dB). A later measurement showed
+  up to +0.98 dB on programme with loud energy at 21–24 kHz; low-passing the
+  same programme at 21 kHz gives +0.024 dB. That is the reconstruction limit
+  of short interpolators (BS.1770 meters share it) and is documented as a
+  limitation; oversampled limiting goes on the next-version list.
+* **Limiter release never reached exactly 1.0** (float stagnation at
+  0.99992) → double-precision envelope.
+* **Limiter cost 1.4 %** — the 8-phase accumulation was scalar; GCC/Clang
+  vector extensions made it 0.43 %.
+* **IRON hysteresis cost 112 ns / sample** → Euler step (the per-sample change of B is
+  tiny at ≥ 88.2 kHz), fewer divisions, float Langevin with a 4-term series
+  near 0: 34 ns, output unchanged to the 6th digit.
+* **Remanence test measured the wrong thing** twice (first the DC-blocker
+  tail, then the CLASSIC model's residual flux 60 ms after the burst). The
+  final test probes 500 ms (25 flux-leak time constants) later at the
+  probe's harmonics only: −60.5 dB (hysteresis) vs −85 dB (classic).
+* Test-harness details: a stray label slipped into a test again (caught in
+  review before compiling); `note()` takes at most four values.
+
+Result: 89 DSP tests / 2730 checks, all passing; ASan/UBSan clean.
+
+## Phase 21 — Plug-in layer
+
+* 15 appended parameters; order checked by test (2.0 host indices
+  unchanged). State version 3 with migration: 2.0 sessions, both A/B slots,
+  legacy trees and version-2 user presets keep IRON = CLASSIC; controls a
+  preset does not mention reset to neutral.
+* Latency: `parameterChanged` → `setLatencySamples` on the message thread,
+  async update otherwise. A test first "failed" because the engine only
+  picks new parameters up on the next block — the reported value was right.
+* 8 new factory presets (43 total).
+
+## Phase 22 — UI
+
+* Advanced panel on four pages with a new glass slider; live band / limiter
+  reduction strips (a default of −1 dB showed a stray stub under every
+  slider — now hidden by default); live latency.
+* GPU meter: JUCE draws the OpenGL renderer first and blends the component
+  layer over it, so the chassis leaves a hole where the meter glass is and
+  a fragment shader draws the glass interior. Verification needed the
+  composited frame: reading the front buffer after a swap returned zeros
+  (undefined under GLX), reading the back buffer at the start of the next
+  frame works with Mesa's copy-swap. Glass vs CPU meter: mean 0.68 / 255;
+  whole editor 0.13 / 255.
+
+## Phase 23 — Validation (2.1)
+
+* DSP 89 / 89, plug-in 17 / 17; ASan/UBSan clean on both; TSan see
+  `TESTING.md`.
+* pluginval 1.0.4 strictness 10 with editor (OpenGL meter on): SUCCESS.
+* CPU re-measured with warm-up and best-of-three; the shared VM still
+  varies ±20 %, so feature costs are reported as ranges.

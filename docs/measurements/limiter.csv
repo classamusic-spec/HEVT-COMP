@@ -1,0 +1,16 @@
+signal,drive_db,ceiling_dbtp,input_true_peak_dbtp,output_sample_peak_dbfs,output_true_peak_dbtp,over_db
+programme (20 kHz band-limited),0,-1,1.14729,-1,-0.976057,0.0239431
+programme (20 kHz band-limited),6,-1,7.14729,-1,-0.959234,0.0407661
+programme (20 kHz band-limited),12,-1,13.1473,-0.999999,-0.959246,0.040754
+programme (20 kHz band-limited),0,-0.3,1.14729,-0.319239,-0.300506,-0.00050645
+programme (20 kHz band-limited),6,-0.3,7.14729,-0.3,-0.259249,0.0407505
+programme (20 kHz band-limited),12,-0.3,13.1473,-0.299999,-0.259246,0.0407536
+programme (full band 24 kHz, white-noise snare),0,-1,1.15256,-1,-0.0208754,0.979125
+programme (full band 24 kHz, white-noise snare),6,-1,7.15256,-1,-0.0205848,0.979415
+programme (full band 24 kHz, white-noise snare),12,-1,13.1526,-1,-0.020584,0.979416
+programme (full band 24 kHz, white-noise snare),0,-0.3,1.15256,-0.3,0.139438,0.439438
+programme (full band 24 kHz, white-noise snare),6,-0.3,7.15256,-0.3,0.679415,0.979415
+programme (full band 24 kHz, white-noise snare),12,-0.3,13.1526,-0.3,0.679416,0.979416
+sine 997 Hz,0,-1,1.58366,-1.00144,-1.00144,-0.00144218
+sine 11025 Hz,0,-1,1.58363,-1.00239,-1.00239,-0.00238603
+sine 12000 Hz,0,-1,1.58353,-4.0098,-0.999596,0.000404062

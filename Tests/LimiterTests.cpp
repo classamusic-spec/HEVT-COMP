@@ -1,5 +1,6 @@
 #include "TestFramework.h"
 #include "EngineHarness.h"
+#include "DSP/Multiband.h"
 #include "DSP/TruePeakLimiter.h"
 
 using namespace heat::dsp;
@@ -36,6 +37,15 @@ namespace
         }
         return peak;
     }
+
+    // 8th-order low-pass at 20 kHz (four TPT sections), used to band-limit
+    // test material the way real programme is.
+    struct TptSvfChain
+    {
+        heat::dsp::TptSvf s[4];
+        TptSvfChain() { for (auto& f : s) f.design (20000.0, 48000.0, 1.0 / 0.7071); }
+        float process (float v) { for (auto& f : s) v = f.lowpass (v); return v; }
+    };
 
     StereoBuffer drumLoop (double fs, int n, double gain)
     {
@@ -118,6 +128,32 @@ HEAT_TEST ("Limiter", "true peak stays at the ceiling (independent 16x meter)")
     }
     note ("worst true-peak overshoot above a -1 dBTP ceiling: %+.3f dB", worstOverDb);
     CHECK (worstOverDb < 0.2);
+}
+
+HEAT_TEST ("Limiter", "band-limited programme: true peak within 0.1 dB of the ceiling")
+{
+    // Real programme is band-limited around 20 kHz. Full-band noise hits (the
+    // loop above, low-passed at 20 kHz) are driven 12 dB into the limiter.
+    const double fs = 48000.0;
+    const int n = 96000;
+    auto in = drumLoop (fs, n, 4.0);
+    for (auto* ch : { &in.l, &in.r })
+    {
+        TptSvfChain lp;
+        for (auto& v : *ch)
+            v = lp.process (v);
+    }
+    double worst = -100.0;
+    for (float ceilingDb : { -1.0f, -0.3f })
+    {
+        auto p = neutralParams();
+        p.limiter = true;
+        p.ceilingDb = ceilingDb;
+        const auto out = runEngine (p, in, fs);
+        worst = std::max (worst, toDb (truePeak (out.l, 4800, n)) - ceilingDb);
+    }
+    note ("20 kHz band-limited drum loop, +12 dB into the limiter: worst true-peak overshoot %+.3f dB", worst);
+    CHECK (worst < 0.1);
 }
 
 HEAT_TEST ("Limiter", "below the ceiling the limiter is an exact (delayed) bypass")

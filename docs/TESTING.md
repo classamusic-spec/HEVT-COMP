@@ -7,15 +7,16 @@ Clang 18.1, JUCE 8.0.15). Numbers are copied from test output, not estimated.
 
 | Binary | Needs JUCE | Tests | What it proves |
 |---|---|---|---|
-| `heat_dsp_tests` | no | 55 | The whole signal path: gain computer, COMPRESS macro, detectors, ballistics, stereo link, sidechain HPF, MIX alignment, engine behaviour, TUBE / IRON, aliasing |
-| `heat_plugin_tests` | yes (headless GUI) | 15 | The plug-in as a host sees it: state, presets, A/B, undo, automation fuzz, sample rates × block sizes × layouts, external sidechain bus, multiple instances, editor stress, realtime safety and concurrency |
+| `heat_dsp_tests` | no | 89 | The whole signal path: gain computer, COMPRESS macro, detectors, ballistics, stereo link, sidechain HPF / LPF / bell, MIX alignment, engine behaviour, TUBE / IRON (both models), aliasing; 2.1: look-ahead, mid/side, limiter, multiband, hysteresis, every feature combined |
+| `heat_plugin_tests` | yes (headless GUI) | 17 | The plug-in as a host sees it: state and 2.0 → 2.1 migration, presets, A/B, undo, latency reporting, automation fuzz, sample rates × block sizes × layouts, external sidechain bus, multiple instances, editor stress, realtime safety and concurrency |
 | `heat_measure` | no | — | Measurement tool: CSVs in `docs/measurements`, WAV renders, CPU profile |
-| `heat_snapshot` | yes | — | Headless editor renderer used for the visual fidelity check and the render benchmark |
+| `heat_snapshot` | yes | — | Headless editor renderer (CPU meter) used for the visual fidelity check and the render benchmark |
+| `heat_gpucheck` | yes (window + OpenGL) | — | Renders the GPU meter in a real window and compares its read-back pixels with the CPU meter (see `UI_SYSTEM.md`) |
 
 Run one suite or test by substring: `heat_dsp_tests Ballistics`,
 `heat_plugin_tests Realtime`.
 
-### DSP (`heat_dsp_tests`, 55 tests, 2446 checks)
+### DSP (`heat_dsp_tests`, 89 tests, 2730 checks)
 
 | Suite | Tests | Key assertions |
 |---|---|---|
@@ -29,29 +30,41 @@ Run one suite or test by substring: `heat_dsp_tests Ballistics`,
 | Engine | 9 | Modes distinct; OPTICAL two-stage release; mode / detector / TUBE / IRON / QUALITY / bypass changes click-free; every mode × detector × quality combination finite and bounded; GR consistent across sample rates; output independent of host block size |
 | Nonlinear | 8 | TUBE THD vs level and amount; H2 → H3 balance with level; small-signal response; IRON LF-dependent saturation and weight; level compensation; exact bypass at 0; no DC; extreme inputs finite and bounded |
 | Aliasing | 3 | Oversampler passband flat and images rejected; TUBE and IRON alias products vs oversampling factor |
+| **Lookahead** (2.1) | 3 | Reported = measured latency for every LOOKAHEAD × LIMITER at 44.1–192 kHz (neutral and oversampled paths); onset overshoot follows e^(−D/τ) within 1 dB; LOOKAHEAD / LIMITER changes click-free |
+| **MidSide** (2.1) | 6 | Rotation invertible for every morph position; neutral M/S / MID / SIDE is a delayed copy (3e-8); mono material identical in L/R and M/S; M/S dual mono leaves a quiet side alone; MID / SIDE only keep the other channel bit-exact; mode switching click-free |
+| **SidechainEQ** (2.1) | 4 | LPF −3 dB at cutoff and bypassed at 20 kHz; bell centre gain / width vs the analytic model; de-esser behaviour; audible path untouched, stable under fast sweeps |
+| **Limiter** (2.1) | 6 | Sample peaks never above the ceiling; true peak (independent 16x meter) within 0.12 dB for full-band noise hits and 0.01 dB for 20 kHz band-limited material; exact bypass below the ceiling; 60 ms release; linked stereo |
+| **Multiband** (2.1) | 6 | Detector bands are LR4; dynamic shelves exact at 0 dB, monotonic, half-gain corner; neutral multiband a delayed copy at MIX 100 / 50 %; bass no longer pumps the presence range; band amounts; on / off / 2 ↔ 3 band changes click-free |
+| **Hysteresis** (2.1) | 6 | Symmetric B–H loop with remanence; Rayleigh region and saturation knee; odd harmonics, no DC, level compensated, exact at 0; remanence audible 500 ms later; aliasing vs factor, extreme inputs; model switch click-free |
+| **FeatureMatrix** (2.1) | 3 | All 2.1 features at once: output identical for host blocks 1 … 4096; 400 random settings changed every 600 samples stay finite and bounded; latency bookkeeping |
 
 Click detection: a change is click-free when the peak second difference of
 the output around the change stays at the steady-state level of the signal
-itself.
+itself. 2.1 tests use `clickRatio`: the peak second difference during the
+transition divided by the larger of the steady states before and after it,
+so a legitimate level change (which moves between the two) reads ≤ ~1 while
+a discontinuity spikes above; the limit is 1.3.
 
-### Plug-in (`heat_plugin_tests`, 15 tests, 971 checks)
+### Plug-in (`heat_plugin_tests`, 17 tests, 1412 checks)
 
 | Suite | Test | What it does |
 |---|---|---|
-| State | parameter IDs are stable | The released ID list is frozen |
+| State | parameter IDs are stable | The released ID list is frozen and append-only (2.0 host indices unchanged); LOOKAHEAD / LIMITER not automatable |
+| State | 2.0 sessions and presets | A version-2 session (and both A/B slots) loads with IRON = CLASSIC and 2.1 controls neutral; a 2.1 round trip keeps HYSTERESIS; a version-2 user preset resets 2.1 controls it does not mention |
+| State | latency follows LOOKAHEAD and LIMITER | Reported latency updates on change, on preset load and on session restore |
 | State | first instantiation shows Vocal Glue | Default preset loads with every control at the reference position |
 | State | session round trip | 20 randomised sessions survive `get/setStateInformation` exactly (plain values) |
 | State | A/B switching, copying, persistence | Slots independent, copy both ways, stored in the session |
-| State | factory presets | 35 presets, unique names, valid categories, each loads exactly |
+| State | factory presets | 43 presets, unique names, valid categories, each loads exactly |
 | State | user presets and favourites | Save / reload / delete / favourite in a temporary directory |
 | State | legacy and corrupt state | Bare `<HEAT>` tree accepted; garbage bytes and empty data ignored without crashing or changing parameters |
 | State | undo | Parameter edits undo and redo |
-| Automation | fuzz | 6000 blocks of random automation of all 18 parameters, random block sizes 1–2048, occasional +12 dBFS input: all finite, peak ≤ safety ceiling |
+| Automation | fuzz | 6000 blocks of random automation of all 33 parameters, random block sizes 1–2048, occasional +12 dBFS input: all finite, peak ≤ safety ceiling |
 | Automation | sample rates × block sizes × layouts | 44.1 / 48 / 88.2 / 96 / 176.4 / 192 kHz × 16…2048-sample blocks plus an odd size (77); stereo and mono layouts; impulse output finite; reported latency equals the engine latency |
 | Automation | external sidechain bus | Key on the sidechain bus drives compression of the main signal |
 | Automation | multiple instances | Two instances with different settings do not affect each other |
 | Automation | editor stress | Open / close / resize the editor repeatedly while audio runs |
-| Realtime | no heap allocation | A global `operator new` hook counts allocations made inside `processBlock`: **0** in 3000 callbacks with random block sizes (1–2047), the external sidechain bus enabled, one parameter changed before every callback (cycling through all 18, including MODE, QUALITY and bypass) and a factory preset loaded every 500 callbacks |
+| Realtime | no heap allocation | A global `operator new` hook counts allocations made inside `processBlock`: **0** in 3000 callbacks with random block sizes (1–2047), the external sidechain bus enabled, one parameter changed before every callback (cycling through all 33, including MODE, QUALITY, bypass, LOOKAHEAD, LIMITER and MULTIBAND) and a factory preset loaded every 500 callbacks |
 | Realtime | concurrent threads | An audio thread (4000 blocks), a UI thread polling the meter telemetry every 2 ms and an automation thread writing random parameters every 0.3 ms run simultaneously; output must stay finite. This is the ThreadSanitizer workload |
 
 ## Sanitizers

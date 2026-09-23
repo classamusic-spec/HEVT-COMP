@@ -31,11 +31,18 @@ INPUT → COMPRESS → ATTACK → RELEASE → MODE → (TUBE / IRON) → MIX →
 | MIX | 0 … 100 % (DRY → WET) | linear | Latency-aligned parallel compression |
 | HPF | 20 … 400 Hz | logarithmic (noon ≈ 89 Hz) | Detector only, never the audible signal |
 
-## Advanced panel (gear)
+## Advanced panel (gear) — 2.1
 
-SIDECHAIN (internal / external), SC LISTEN, STEREO LINK (linked / partial /
-dual mono), AUTO MAKEUP, AUTO RELEASE, QUALITY (NORMAL 2x / HIGH 4x / ULTRA
-8x), METER HOLD, UI SIZE (75 / 100 / 125 %). Latency and version readout.
+Four pages; the front panel stays exactly the locked reference.
+
+| Page | Controls |
+|---|---|
+| GENERAL | STEREO MODE (L/R · M/S · MID · SIDE), STEREO LINK (linked / partial / dual mono), LOOKAHEAD (off · 0.5 · 1 · 2 · 5 · 10 ms), AUTO MAKEUP, AUTO RELEASE, QUALITY (NORMAL 2x / HIGH 4x / ULTRA 8x), IRON MODEL (CLASSIC / HYSTERESIS) |
+| SIDECHAIN | SOURCE (internal / external), SC LISTEN, HIGH-PASS (mirrors HPF), LOW-PASS (1 – 20 kHz, 20 kHz = off), EQ FREQ / GAIN (±18 dB) / Q |
+| MULTIBAND | MULTIBAND (off / 2 band / 3 band), LOW and HIGH crossovers, LOW / MID / HIGH amount (0 – 200 % of COMPRESS) with live band reduction |
+| OUTPUT | LIMITER, CEILING (−12 … 0 dBTP) with live limiter reduction, METER HOLD, GPU METER, UI SIZE (75 / 100 / 125 %) |
+
+Footer: live latency (samples and ms) and version.
 
 ## Header
 
@@ -44,7 +51,7 @@ settings gear, A / B comparison (right-click: copy A→B, B→A), brand mark.
 
 ## Presets
 
-35 factory presets in 10 categories (ESSENTIALS, VOCALS, DRUMS, BASS, BUS,
+43 factory presets in 10 categories (ESSENTIALS, VOCALS, DRUMS, BASS, BUS,
 MASTER, PARALLEL, WARM, DRIVE, CREATIVE) plus user presets (`*.heatpreset`
 XML in the user application-data folder) and persistent favourites. A newly
 inserted instance opens on **Vocal Glue**, whose controls all sit at
@@ -53,10 +60,14 @@ inserted instance opens on **Vocal Glue**, whose controls all sit at
 ## Formats and platforms
 
 VST3 and Standalone on Windows / macOS / Linux; AU on macOS. Mono and stereo
-main buses; optional mono / stereo sidechain bus. Constant latency (79
-samples up to 96 kHz, 69 above 100 kHz) reported to the host.
+main buses; optional mono / stereo sidechain bus. Core latency 79 samples up
+to 96 kHz (69 above 100 kHz), plus LOOKAHEAD and the limiter's 1.98 ms when
+those are switched on; always reported to the host.
 
-## Non-goals for V2
+## Added in 2.1
 
-M/S, lookahead, multiband, sidechain EQ, limiter stage (see the release report
-for the V2.1 / V3 list).
+Mid/side and MID / SIDE-only processing, look-ahead, sidechain EQ (low-pass
+and bell), a true-peak output limiter, 2 / 3-band multiband compression, a
+Jiles–Atherton hysteresis model for IRON (the 2.0 model stays available and
+is kept by 2.0 sessions) and a GPU-rendered gain-reduction meter. See the
+feature documents linked from `DSP_ARCHITECTURE.md`.

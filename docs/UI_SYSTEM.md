@@ -42,7 +42,8 @@ Deliberate deviations from the reference image:
 | GR meter | `UI/GainReductionDisplay.*` | Background + overlay layers cached; ember columns, neon walls, white-hot base, rim reflection and peak needle drawn per frame |
 | MODE / DETECTOR | `UI/SegmentedSelector.*` | Silver pills; active pill dark ember with hot outline and bloom |
 | Header | `UI/Header.*` | Preset pill (prev / name / tags / heart / next), gear, A / B with underline |
-| Advanced panel | `UI/AdvancedPanel.*` | Dark glass popover; scrim closes it on outside click / Esc |
+| Advanced panel | `UI/AdvancedPanel.*`, `UI/AdvancedSlider.*` | Dark glass popover with four pages (GENERAL / SIDECHAIN / MULTIBAND / OUTPUT); glass sliders with live reduction strips; scrim closes it on outside click / Esc |
+| GPU meter | `UI/GpuMeter.*` | OpenGL renderer for the meter glass (see below) |
 | Look & feel | `UI/HeatLookAndFeel.*` | Menus, tooltips, dialogs, text entry, resize corner — no stock JUCE styling |
 | Icons / logotype | `UI/Icons.*` | HEAT (E with detached top bar, bar-less Λ), gear, heart, chevrons, tube waves, iron core, crosshair, HPF curve |
 
@@ -84,6 +85,74 @@ automatically while the editor is hidden.
 * Undo / redo: Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z, Cmd/Ctrl+Y.
 * Accessibility: knobs expose a ranged value interface; selectors and meter
   expose text values; all controls have titles; keyboard focus rings.
+
+## Advanced panel (2.1)
+
+The front panel is untouched: a 2.1 render of the reference state is
+pixel-identical to the 2.0 render (maximum difference 0). Everything new
+lives in the gear popover, now on four pages selected by a pill tab row:
+
+* **GENERAL** — STEREO MODE, STEREO LINK, LOOKAHEAD, AUTO MAKEUP, AUTO
+  RELEASE, QUALITY, IRON MODEL
+* **SIDECHAIN** — SOURCE, SC LISTEN, HIGH-PASS, LOW-PASS, EQ FREQ / GAIN / Q
+* **MULTIBAND** — MULTIBAND, LOW / HIGH X-OVER, LOW / MID / HIGH amount;
+  each band slider carries a live reduction strip (0 … −12 dB)
+* **OUTPUT** — LIMITER, CEILING (live limiter reduction strip, 0 … −6 dB),
+  METER HOLD, GPU METER, UI SIZE
+
+Controls that do nothing in the current configuration are dimmed (the MID
+band and HIGH X-OVER outside 3-band mode, the band amounts when multiband is
+off, CEILING while the limiter is off). The footer shows the live latency in
+samples and milliseconds. The glass slider (`AdvancedSlider`) follows the
+knobs' interaction model: drag (Shift / Cmd / Ctrl = fine), double-click
+reset, wheel, click the value or Return to type, right-click menu, arrow /
+Page / Home / End keys, ranged-value accessibility; bipolar ranges fill from
+the centre. The last page shown is remembered for the session.
+
+## GPU meter (2.1)
+
+With GPU METER on (default), the editor attaches a `juce::OpenGLContext`.
+JUCE then draws `GpuMeterRenderer::renderOpenGL()` first and blends the
+software-painted component layer over it (premultiplied alpha). In GPU mode
+the chassis and the meter component leave the meter glass transparent, so
+what shows there comes from the GPU:
+
+* **glass background** — a texture rendered once per scale by the same code
+  as the CPU meter (`GainReductionDisplay::paintBackground`), origin snapped
+  to the pixel grid so texels land exactly on pixels;
+* **warmth, bloom, ember columns, neon walls, white-hot base, rim glow, peak
+  needle** — one fragment shader. Shapes are signed-distance fields with
+  pixel-width antialiasing; the ember ramp is a 256 × 1 lookup texture built
+  from the same gradient stops; colours are interpolated unpremultiplied (as
+  `juce::ColourGradient` does) and composited with premultiplied "over" in
+  the same order as the CPU painter.
+
+The scale overlay (centre column, ticks, legends, title) stays in the
+component layer on top. Per frame the message thread only stores three
+numbers (left, right, peak) and triggers a GL repaint: no path
+rasterisation, no pixel pushing on the UI thread. If no OpenGL context or
+shader is available the editor stays on the CPU meter (the meter only
+switches to GPU mode after the shader compiled); GPU METER in the OUTPUT page
+switches between the two at any time and is saved with the session.
+
+**Verification (`heat_gpucheck`).** The tool opens the real editor in a
+window, reads back (a) the glass exactly as the shader drew it and (b) a
+complete presented frame including JUCE's GL-composited UI, and compares
+them with the CPU renderings of the same state. Under Xvfb with Mesa
+(software OpenGL):
+
+| Scale / state | Glass: mean / p99 / max diff (/255) | Whole editor: mean / p99 |
+|---|---|---|
+| 100 %, −3.66 dB, peak −6 | 0.68 / 4 / 23 | 0.13 / 2 |
+| 75 %, −3.66 dB | 0.67 / 4 / 17 | 0.19 / 3 |
+| 125 %, −3.66 dB | 0.66 / 4 / 26 | 0.18 / 3 |
+| 100 %, idle (0 dB) | 0.00 / 0 / 0 | 0.11 / 2 |
+| 100 %, −1.2 dB (half lit) | 1.34 / 6 / 17 | 0.17 / 3 |
+| 100 %, −18 dB, peak −24 | 0.24 / 3 / 22 | 0.12 / 2 |
+
+`design/fidelity/GPU_vs_CPU_METER.png` shows GPU | CPU | difference × 8.
+Hardware GPU timing and HiDPI (render scale > 1) could not be measured here
+(no GPU, no HiDPI display): `UNVERIFIED — ENVIRONMENT LIMITATION`.
 
 ## Sizing
 

@@ -23,7 +23,23 @@ At a −12 dBFS 187.5 Hz tone with COMPRESS 60 % (compressor active):
 CLEAN 0.026 % THD (pure gain-modulation distortion), WARM 0.52 %, DRIVE 4.3 %.
 Mode switching is click-free.
 
+## IRON HYSTERESIS (2.1 default)
+
+The Jiles–Atherton core (`IRON_MODEL.md`) was put through the same gate:
+
+| Requirement | Result |
+|---|---|
+| THD vs level | **PASS** — Rayleigh region at low level (×2.1 per +10 dB), saturation knee above (×3.5 from −12 to 0 dBFS); −12 dBFS, 50 Hz: 0.070 / 0.179 / 0.369 / 0.755 % at 25/50/75/100 % (CLASSIC 0.095 / 0.270 / 0.521 / 0.847) |
+| Harmonic distribution | **PASS** — odd only on symmetric signals (H2 −170 dBc); even harmonics appear only from remanence (history), as in real iron |
+| Hysteresis | **PASS** — symmetric loop, coercive field ±0.015, remanence 0.165, probe difference after ± history −60.5 dB (CLASSIC −85 dB) |
+| Aliasing | **PASS** — 100 %, −3 dBFS, 10 kHz: −103.1 (1x) → −123.2 (2x) → −133.9 (4x) → −154.6 dBc (8x) |
+| DC / level | **PASS** — DC 0.0; programme level +0.07 dB at 100 % |
+| Exact bypass at 0, extreme inputs, click-free model switch | **PASS** |
+| 2.0 compatibility | **PASS** — 2.0 sessions, A/B slots and presets load with CLASSIC |
+
 ## CPU (one stereo instance, 48 kHz, 256-sample blocks, Release, this machine)
+
+2.0 (IRON = CLASSIC):
 
 | Configuration | NORMAL (2x) | HIGH (4x) | ULTRA (8x) |
 |---|---|---|---|
@@ -33,12 +49,24 @@ Mode switching is click-free.
 | WARM + TUBE + IRON 50 % | 1.86 % | 2.72 % | 4.55 % |
 | DRIVE + TUBE + IRON 50 % | 1.92 % | 3.16 % | 5.03 % |
 
-Percent of one core (x86-64 container vCPU). Full table: `measurements/cpu.csv`.
+2.1 (IRON = HYSTERESIS, `measurements/cpu.csv`): WARM + TUBE + IRON 50 %
+2.1 / 3.6 / 6.2 %, DRIVE + TUBE + IRON 50 % 2.1 / 3.9 / 5.9 % at NORMAL /
+HIGH / ULTRA. The hysteresis core costs 34 ns per oversampled sample and
+channel after optimisation (Euler step, float Langevin; the first version
+cost 112 ns). Per 2.1 feature over a WARM / HIGH baseline
+(`measurements/cpu_features.csv`, range over three runs): IRON HYSTERESIS
++0.9 … 1.4 % (CLASSIC +0.7 … 0.9 %), LIMITER +0.0 … 0.4 %, MULTIBAND 2 / 3 bands
++0.8 … 1.2 / +1.3 … 2.4 %, M/S, LOOKAHEAD and SC EQ within the noise;
+everything at once 5.6 … 6.7 % (HIGH), 8.0 … 10.1 % (ULTRA).
+
+Percent of one core (x86-64 container vCPU, shared; run-to-run variation
+about ±20 %).
 
 ## Gate result
 
-**ANALOG: PASS** for every measurable requirement.
+**ANALOG: PASS** for every measurable requirement, for both IRON models.
 
 Listening: `UNVERIFIED — ENVIRONMENT LIMITATION` (no audio device). WAV
 renders for audition: `heat_measure <dir>` → `wav/06_warm_tube50_iron50.wav`,
-`wav/07_drive_tube100_iron100.wav`, `wav/08_parallel_drive_mix40.wav`.
+`wav/07_drive_tube100_iron100.wav`, `wav/08_parallel_drive_mix40.wav`,
+`wav/12_iron100_hysteresis.wav` vs `wav/13_iron100_classic.wav`.

@@ -1,0 +1,4 @@
+multiband,presence_swing_db,low_band_gr_db,mid_band_gr_db,high_band_gr_db,neutral_null
+OFF,16.4317,0,0,0,0
+2 BAND,0.563975,-12.8584,0,-0.901662,0
+3 BAND,0.128242,-12.8584,0,-0.235827,0

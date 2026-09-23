@@ -16,8 +16,13 @@ inputs plus half of a delayed odd input. Even taps are normalised to sum to
 
 Quality settings: NORMAL = 2x, HIGH = 4x (default), ULTRA = 8x. Above
 100 kHz one stage is dropped (two above 150 kHz). Every quality is padded at
-the high rate to the ULTRA latency, so the plugin latency is constant: 79
-samples ≤ 96 kHz, 69 samples above.
+the high rate to the ULTRA latency, so the core latency never depends on
+QUALITY: 79 samples ≤ 96 kHz, 69 samples above. (2.1: LOOKAHEAD and the
+LIMITER add their own latency on top when the user switches them on.)
+
+2.1 also runs the multiband dynamic shelves and the IRON hysteresis core at
+the oversampled rate; their measurements are in `MULTIBAND.md` and
+`IRON_MODEL.md`.
 
 Only the colour path is oversampled; clean dynamics never are (and when no
 colour is active the oversampler does not run at all).
