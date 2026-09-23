@@ -31,6 +31,11 @@ Deliberate deviations from the reference image:
 * Footer typo fixed: "COMPRESION" → "COMPRESSION".
 * The ghosted duplicate "GAIN" above "GAIN REDUCTION" (an artefact of the
   generated reference) is not reproduced.
+* The gain-reduction meter is built as a glass instrument (requested after
+  2.1, see *Meter*): a 9-unit machined bezel instead of the 6-unit rim,
+  glass tubes and a cover glass. Same position, size, scale and embers; the
+  meter region moves away from the reference (MAE 17.0 → 22.2 / 255,
+  overall 12.42 → 12.85), every pixel outside it is unchanged (12.00).
 
 ## Components
 
@@ -39,7 +44,7 @@ Deliberate deviations from the reference image:
 | Chassis & legends | `Graphics/SilverSurface.*` | Rim, satin face (vertical gradient + radial glows + mean-preserving noise), lip, grooves, logotype, icons, all static legends; cached once per physical scale |
 | Knobs | `UI/HeatKnob.*` | Large (INPUT/OUTPUT), medium (ATTACK/RELEASE, grey track ring), COMPRESS (tick scale, amber heat ring), small (TUBE/IRON/MIX/HPF, scale dots). Static layer (shadow, skirt, spun face) cached at physical resolution; pointer and arcs drawn live |
 | Spun face | `surface::makeSpunFace` | Conic reflection `base + A cos2θ + tilt cosθ` + fine concentric grain, per-pixel |
-| GR meter | `UI/GainReductionDisplay.*` | Background + overlay layers cached; ember columns, neon walls, white-hot base, rim reflection and peak needle drawn per frame |
+| GR meter | `UI/GainReductionDisplay.*` | Glass instrument. Background (shadow, bezel, back plate, empty tubes) and overlay (scale, tube glass, cover glass) cached per physical scale; ember columns, neon walls, white-hot base, rim reflection and peak needle drawn per frame between the two; only the glass is repainted |
 | MODE / DETECTOR | `UI/SegmentedSelector.*` | Silver pills; active pill dark ember with hot outline and bloom |
 | Header | `UI/Header.*` | Preset pill (prev / name / tags / heart / next), gear, A / B with underline |
 | Advanced panel | `UI/AdvancedPanel.*`, `UI/AdvancedSlider.*` | Dark glass popover with four pages (GENERAL / SIDECHAIN / MULTIBAND / OUTPUT); glass sliders with live reduction strips; scrim closes it on outside click / Esc |
@@ -71,6 +76,33 @@ peak hold then 15 dB/s fall (METER HOLD toggle). Frames are driven by
 `juce::VBlankAttachment` (display refresh, typically 60 Hz), which stops
 automatically while the editor is hidden.
 
+### Glass instrument
+
+The meter is drawn as a physical object behind a cover glass, lit from the
+top left like the knobs (`design/fidelity/GR_METER_GLASS.png`: before |
+after at −3.7 dB | idle | −18 dB). Bottom to top:
+
+| Layer | Content |
+|---|---|
+| Shadow | a tight contact shadow under a wide ambient one: the instrument sits on the panel |
+| Bezel (9 units) | polished outer edge, satin face (diagonal gradient), a turned step, a chamfer in shade at the top and lit at the bottom, a black seal against the glass, glints on the rounded corners |
+| Back plate | set deep in the recess: the bezel walls shade it (most at the top), a faint lift in the middle |
+| Tubes | round: their walls fall off into shadow |
+| Embers, needle | per frame (unchanged) |
+| Scale | centre column, ticks, legends, title |
+| Tube glass | soft sheen and a specular line on the lit side of each tube, a faint far-wall reflection; visible over the embers and over an empty tube |
+| Cover glass | a softbox reflected in the top-left corner, a curved crystal reflection with a crisp lower edge over the top of the pane, more reflection at grazing angles under the bezel, the polished edge of the pane. Reflections carry the faint cool cast of a coated pane, which sets them apart from the warm light behind |
+
+Everything above the embers is static and cached with the scale, so the
+glass costs nothing per frame; the needle sits under the glass. Per frame
+only the glass is repainted (not the bezel and shadow around it).
+
+**Pixel alignment.** The meter component's origin sits on a multiple of 4
+reference units — a whole pixel at 50, 75, 100 and 125 % — so its cached
+layers are copied 1:1 instead of being resampled a quarter pixel off the
+grid (as they were at 75 / 125 % before). Sharpness of the meter at 75 %
+(Laplacian variance) 922 → 2138; frame cost below.
+
 ## Interaction
 
 * Knobs: vertical/horizontal drag; Shift / Cmd / Ctrl = 8× fine (re-anchored
@@ -88,8 +120,9 @@ automatically while the editor is hidden.
 
 ## Advanced panel (2.1)
 
-The front panel is untouched: a 2.1 render of the reference state is
-pixel-identical to the 2.0 render (maximum difference 0). Everything new
+The front panel was untouched: the 2.1 render of the reference state was
+pixel-identical to the 2.0 render (maximum difference 0) until the glass
+meter above. Everything new
 lives in the gear popover, now on four pages selected by a pill tab row:
 
 * **GENERAL** — STEREO MODE, STEREO LINK, LOOKAHEAD, AUTO MAKEUP, AUTO
@@ -114,12 +147,13 @@ the centre. The last page shown is remembered for the session.
 With GPU METER on (default), the editor attaches a `juce::OpenGLContext`.
 JUCE then draws `GpuMeterRenderer::renderOpenGL()` first and blends the
 software-painted component layer over it (premultiplied alpha). In GPU mode
-the chassis and the meter component leave the meter glass transparent, so
-what shows there comes from the GPU:
+the chassis and the meter component leave the meter's GPU window
+transparent — the glass plus 1.5 units of the static bezel — so what shows
+there comes from the GPU:
 
-* **glass background** — a texture rendered once per scale by the same code
-  as the CPU meter (`GainReductionDisplay::paintBackground`), origin snapped
-  to the pixel grid so texels land exactly on pixels;
+* **back plate and bezel** — a texture rendered once per scale by the same
+  code as the CPU meter (`GainReductionDisplay::paintBackground`), origin
+  snapped to the pixel grid so texels land exactly on pixels;
 * **warmth, bloom, ember columns, neon walls, white-hot base, rim glow, peak
   needle** — one fragment shader. Shapes are signed-distance fields with
   pixel-width antialiasing; the ember ramp is a 256 × 1 lookup texture built
@@ -127,8 +161,18 @@ what shows there comes from the GPU:
   `juce::ColourGradient` does) and composited with premultiplied "over" in
   the same order as the CPU painter.
 
-The scale overlay (centre column, ticks, legends, title) stays in the
-component layer on top. Per frame the message thread only stores three
+The scale overlay (centre column, ticks, legends, title) and the cover
+glass stay in the component layer on top.
+
+**The seam.** Where the two layers meet, both must show the same pixels.
+The window therefore reaches into the static bezel, where the GPU texture
+and the component layer draw identical pixels; the meter cuts the window out
+of its finished bezel layer in one copy (clipping each bezel primitive
+separately stacked their partial coverage on the antialiased edge, and the
+lighter face under the chamfer bled into the seam); and the chassis hole is
+2 units larger than the window, so only one antialiased edge meets the GPU
+layer. Seam error at the glass corners: up to 68 / 255 in 2.1, none left
+(the largest difference in the meter region is now the shader's own). Per frame the message thread only stores three
 numbers (left, right, peak) and triggers a GL repaint: no path
 rasterisation, no pixel pushing on the UI thread. If no OpenGL context or
 shader is available the editor stays on the CPU meter (the meter only
@@ -138,17 +182,25 @@ switches between the two at any time and is saved with the session.
 **Verification (`heat_gpucheck`).** The tool opens the real editor in a
 window, reads back (a) the glass exactly as the shader drew it and (b) a
 complete presented frame including JUCE's GL-composited UI, and compares
-them with the CPU renderings of the same state. Under Xvfb with Mesa
-(software OpenGL):
+them with the CPU renderings of the same state. It reports the state both
+directly and through the processor's telemetry, which the editor's frame
+clock reads: with no audio running the clock would otherwise release the
+meter towards 0 dB between two ticks, and a capture could catch it
+part-way (the cause of one intermittent failure; three repeats of every
+case are now identical). Under Xvfb with Mesa (software OpenGL), glass
+meter build:
 
-| Scale / state | Glass: mean / p99 / max diff (/255) | Whole editor: mean / p99 |
-|---|---|---|
-| 100 %, −3.66 dB, peak −6 | 0.68 / 4 / 23 | 0.13 / 2 |
-| 75 %, −3.66 dB | 0.67 / 4 / 17 | 0.19 / 3 |
-| 125 %, −3.66 dB | 0.66 / 4 / 26 | 0.18 / 3 |
-| 100 %, idle (0 dB) | 0.00 / 0 / 0 | 0.11 / 2 |
-| 100 %, −1.2 dB (half lit) | 1.34 / 6 / 17 | 0.17 / 3 |
-| 100 %, −18 dB, peak −24 | 0.24 / 3 / 22 | 0.12 / 2 |
+| Scale / state | Glass: mean / p99 / max diff (/255) | Meter in frame: mean / p99 / max | Whole editor: mean / p99 |
+|---|---|---|---|
+| 100 %, −3.66 dB, peak −6 | 0.68 / 4 / 23 | 0.71 / 3 / 23 | 0.14 / 2 |
+| 75 %, −3.66 dB | 0.67 / 4 / 17 | 0.73 / 4 / 17 | 0.16 / 2 |
+| 125 %, −3.66 dB | 0.66 / 4 / 27 | 0.70 / 3 / 27 | 0.15 / 2 |
+| 100 %, idle (0 dB) | 0.00 / 0 / 0 | 0.32 / 1 / 1 | 0.12 / 2 |
+| 100 %, −1.2 dB (half lit) | 1.39 / 6 / 21 | 1.25 / 6 / 21 | 0.18 / 4 |
+| 100 %, −18 dB, peak −24 | 0.24 / 3 / 22 | 0.49 / 3 / 22 | 0.13 / 2 |
+
+(2.1 before the glass meter, meter in frame: p99 3 / 18 / 11 and max
+68 / 66 / 63 at 100 / 75 / 125 %.)
 
 `design/fidelity/GPU_vs_CPU_METER.png` shows GPU | CPU | difference × 8.
 Hardware GPU timing and HiDPI (render scale > 1) could not be measured here

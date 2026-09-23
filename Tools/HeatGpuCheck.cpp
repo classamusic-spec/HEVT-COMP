@@ -151,6 +151,15 @@ private:
 
     void setState()
     {
+        // The editor's frame clock keeps feeding the meter from the processor's
+        // telemetry; report the same reduction there, or (with no audio running)
+        // every frame would release the meter towards 0 dB between two ticks
+        // and a capture could catch it part-way.
+        heat::dsp::EngineTelemetry t;
+        t.grDb[0] = t.grDbLast[0] = grDb;
+        t.grDb[1] = t.grDbLast[1] = grDb + 0.8f;
+        processor->getTelemetry().publish (t);
+
         auto& meter = editor->getMainPanel().getMeter();
         meter.setImmediate (grDb, grDb + 0.8f, peakDb);
     }

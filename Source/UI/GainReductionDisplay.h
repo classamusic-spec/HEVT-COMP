@@ -36,10 +36,10 @@ namespace heat::ui
         float getDisplayedDb (int channel) const noexcept { return shown[channel]; }
         float getPeakDb() const noexcept { return peak; }
 
-        // GPU mode: the glass interior (glass, embers, glow, needle) is drawn
-        // by an OpenGL renderer underneath this component; paint() then only
-        // draws the rim around the glass and the scale overlay on top, and
-        // each changed frame is announced through onGpuFrame instead of a
+        // GPU mode: the glass interior (back plate, embers, glow, needle) is
+        // drawn by an OpenGL renderer underneath this component; paint() then
+        // only draws the bezel around it and the scale and cover glass on top,
+        // and each changed frame is announced through onGpuFrame instead of a
         // repaint.
         void setGpuMode (bool enabled);
         bool isGpuMode() const noexcept { return gpuMode; }
@@ -56,8 +56,16 @@ namespace heat::ui
         // Shared with the GPU renderer and its verification (reference coordinates).
         static juce::Rectangle<float> glassBounds();
         static float glassRadius();
+        // GPU mode: where the OpenGL layer shows through. It reaches a little
+        // past the glass into the static bezel, so the seam between the two
+        // layers falls on pixels both of them draw identically.
+        static juce::Rectangle<float> gpuWindowBounds();
+        static float gpuWindowRadius();
         static void paintBackground (juce::Graphics& g);
+        // Scale column, ticks, legends and title (over the embers).
         static void paintOverlay (juce::Graphics& g);
+        // The cover glass and the tube glass: reflections over everything else.
+        static void paintGlass (juce::Graphics& g);
         // Everything that moves inside the glass: warmth, bloom, ember columns, rim glow.
         static void paintDynamic (juce::Graphics& g, float leftDb, float rightDb);
         // Peak-hold needle on the right column (drawn when peakDb < -0.05).
@@ -65,6 +73,7 @@ namespace heat::ui
 
     private:
         void renderLayers (float pixelScale);
+        void repaintGlass();
         static void paintColumn (juce::Graphics& g, float x0, float x1, float db, bool outerEdgeLeft);
 
         juce::Rectangle<float> outerBounds;

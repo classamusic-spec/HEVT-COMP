@@ -167,10 +167,14 @@ namespace heat::ui
     {
         if (gpuHole)
         {
-            // Leave the meter glass transparent: the GPU layer shows through.
+            // Leave the meter's GPU window transparent: the OpenGL layer shows
+            // through. The hole is a little larger than the window; the meter's
+            // opaque bezel covers the difference, so only the meter's own edge
+            // meets the OpenGL layer (two coincident antialiased edges would
+            // let the chassis bleed into the seam).
             juce::Path hole;
             hole.addRectangle (getLocalBounds().toFloat());
-            hole.addRoundedRectangle (GainReductionDisplay::glassBounds(), GainReductionDisplay::glassRadius());
+            hole.addRoundedRectangle (GainReductionDisplay::gpuWindowBounds().expanded (2.0f), GainReductionDisplay::gpuWindowRadius() + 2.0f);
             hole.setUsingNonZeroWinding (false);
             g.reduceClipRegion (hole);
         }
@@ -362,7 +366,7 @@ void HeatAudioProcessorEditor::applyScale (float scale)
 void HeatAudioProcessorEditor::paint (juce::Graphics& g)
 {
     if (panel.hasGpuHole())
-        g.excludeClipRegion (getLocalArea (&panel, heat::ui::GainReductionDisplay::glassBounds()).toNearestInt());
+        g.excludeClipRegion (getLocalArea (&panel, heat::ui::GainReductionDisplay::gpuWindowBounds()).getSmallestIntegerContainer());
     g.fillAll (juce::Colour (0xff57585a));
 }
 

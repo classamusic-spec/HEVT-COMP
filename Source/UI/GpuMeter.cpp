@@ -259,11 +259,11 @@ namespace heat::ui
     void GpuMeterRenderer::buildBackground (float pxPerRef)
     {
         // Snap the texture origin to the pixel grid so texels sit exactly on pixels.
-        const auto glass = GainReductionDisplay::glassBounds();
-        const float x = std::floor (glass.getX() * pxPerRef - 2.0f) / pxPerRef;
-        const float y = std::floor (glass.getY() * pxPerRef - 2.0f) / pxPerRef;
-        const int w = static_cast<int> (std::ceil ((glass.getRight() - x) * pxPerRef + 2.0f));
-        const int h = static_cast<int> (std::ceil ((glass.getBottom() - y) * pxPerRef + 2.0f));
+        const auto window = GainReductionDisplay::gpuWindowBounds();
+        const float x = std::floor (window.getX() * pxPerRef - 2.0f) / pxPerRef;
+        const float y = std::floor (window.getY() * pxPerRef - 2.0f) / pxPerRef;
+        const int w = static_cast<int> (std::ceil ((window.getRight() - x) * pxPerRef + 2.0f));
+        const int h = static_cast<int> (std::ceil ((window.getBottom() - y) * pxPerRef + 2.0f));
         juce::Image image (juce::Image::ARGB, w, h, true);
         {
             juce::Graphics g (image);
@@ -354,8 +354,8 @@ namespace heat::ui
         glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        // One quad over the glass (+2 px), in normalised device coordinates.
-        const auto area = glass.expanded (2.0f / pxPerRef);
+        // One quad over the GPU window (+2 px), in normalised device coordinates.
+        const auto area = GainReductionDisplay::gpuWindowBounds().expanded (2.0f / pxPerRef);
         auto ndcX = [&] (float x) { return 2.0f * x * pxPerRef / static_cast<float> (widthPx) - 1.0f; };
         auto ndcY = [&] (float y) { return 1.0f - 2.0f * y * pxPerRef / static_cast<float> (heightPx); };
         const GLfloat quad[] = { ndcX (area.getX()), ndcY (area.getY()),      ndcX (area.getRight()), ndcY (area.getY()),

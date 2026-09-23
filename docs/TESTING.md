@@ -110,7 +110,11 @@ parameter thread safety, fuzz parameters, bus tests, background-thread
 state, …). Same result for 2.0.
 
 `heat_gpucheck` on the final build: glass mean difference 0.68 / 255
-(p99 4), whole composited editor 0.14 / 255 (p99 2): PASS.
+(p99 4), whole composited editor 0.14 / 255 (p99 2): PASS. Glass meter
+build: six cases (75 / 100 / 125 %, idle to −18 dB), each repeated three
+times with identical results, all PASS; the meter inside the composited
+frame now matches the CPU meter as closely as the shader alone (idle: max
+1 / 255; see `UI_SYSTEM.md`).
 
 ## Realtime safety by design
 
@@ -128,15 +132,30 @@ state, …). Same result for 2.0.
 * `heat_snapshot` renders the real editor headlessly at the reference state,
   the advanced panel, and at 75 / 100 / 125 % scale; images in
   `design/fidelity/`.
-* Fidelity vs the locked reference: overall MAE 12.4 / 255, flat panel 2.5
-  (method in `UI_SYSTEM.md`).
+* Fidelity vs the locked reference: overall MAE 12.85 / 255, flat panel 2.5
+  (method in `UI_SYSTEM.md`). 12.42 before the glass meter; the difference
+  lies entirely inside the meter region (17.0 → 22.2), every other pixel is
+  unchanged.
 * Render benchmark (`heat_snapshot out.png <scale> <gr> bench`): per-frame
-  repaint of the animated regions (meter + COMPRESS ring) 1.57 ms at 100 %,
-  2.39 ms at 75 %, 6.12 ms at 125 % (software renderer, one core; repeat of
-  an earlier run within 0.1 ms); a full editor repaint 11.1 / 11.1 / 22.1 ms,
-  which only happens on open / resize. The 75 % frame costing more than
-  100 % was not investigated further; fractional pixel alignment of the
-  cached layers at that scale is the suspected cause.
+  repaint of the animated regions (meter glass + COMPRESS ring), rendered
+  on the editor's own pixel grid (a region is pixel-identical to the same
+  crop of a full-editor render). Glass meter vs the 2.1 meter, same build
+  flags, four alternating runs each (software renderer, one core):
+
+  | Scale | 2.1 meter | Glass meter |
+  |---|---|---|
+  | 75 % | 2.19 … 2.91 ms | 1.34 … 1.56 ms |
+  | 100 % | 1.57 … 2.10 ms | 1.47 … 1.93 ms |
+  | 125 % | 6.14 … 7.32 ms | 3.08 … 3.87 ms |
+
+  The glass layers are cached, so they add nothing per frame; the savings
+  come from blitting pixel-aligned layers instead of resampling them at
+  75 / 125 % (this was why 75 % used to cost more than 100 %) and from
+  repainting only the glass. A full editor repaint (open / resize only):
+  8.3 … 11.3 / 9.4 … 12.6 / 17.1 … 21.7 ms. The benchmark used to snapshot
+  each region with its own origin, which placed cached layers differently
+  from the editor at 75 / 125 %; it now paints the regions exactly as the
+  editor does.
 * Editor open / close / resize stress under the plug-in tests; pluginval
   editor tests at strictness 10.
 

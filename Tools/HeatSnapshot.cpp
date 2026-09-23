@@ -9,6 +9,7 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 #include "Core/Constants.h"
+#include "UI/GainReductionDisplay.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -76,13 +77,28 @@ int main (int argc, char** argv)
             };
             auto& panel = heatEditor->getMainPanel();
             const double full = time ([&] (int) { editor->createComponentSnapshot (editor->getLocalBounds(), true, 1.0f); }, 30);
-            const auto meterArea = juce::Rectangle<int> (627, 137, 285, 419);
+            // The meter repaints only its glass per frame.
+            const auto meterArea = heat::ui::GainReductionDisplay::glassBounds().getSmallestIntegerContainer().expanded (1);
             const auto knobArea = juce::Rectangle<int> (600, 545, 340, 340);
+            // Render a dirty region the way the editor repaints it: on the
+            // editor's pixel grid (panel origin at pixel 0), clipped to the
+            // region. A component snapshot of the region would move the grid
+            // origin to the region's corner and misplace cached layers by a
+            // fraction of a pixel at 75 / 125 %.
+            auto paintRegion = [&panel, scale] (juce::Rectangle<int> area)
+            {
+                const auto pixels = (area.toFloat() * scale).getSmallestIntegerContainer();
+                juce::Image region (juce::Image::ARGB, pixels.getWidth(), pixels.getHeight(), true);
+                juce::Graphics g (region);
+                g.addTransform (juce::AffineTransform::scale (scale).translated (static_cast<float> (-pixels.getX()), static_cast<float> (-pixels.getY())));
+                g.reduceClipRegion (area);
+                panel.paintEntireComponent (g, true);
+            };
             const double animated = time ([&] (int i)
             {
                 panel.setPreviewGainReduction (-1.0f - static_cast<float> (i % 20));
-                panel.createComponentSnapshot (meterArea, true, scale);
-                panel.createComponentSnapshot (knobArea, true, scale);
+                paintRegion (meterArea);
+                paintRegion (knobArea);
             }, 200);
             std::printf ("render bench @ scale %.2f: full editor %.2f ms/frame, animated regions %.2f ms/frame\n",
                          scale, full, animated);

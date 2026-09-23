@@ -8,16 +8,38 @@ namespace heat::ui
 
     namespace
     {
-        constexpr float margin = 12.0f;
+        constexpr float margin = 20.0f; // room for the instrument's shadow on the panel
         constexpr float releaseTau = 0.060f;
         constexpr double peakHoldSeconds = 1.5;
         constexpr float peakFallDbPerSecond = 15.0f;
+
+        // The two glass tubes the embers burn in (x0, x1), and their corner radius.
+        constexpr std::pair<float, float> tubes[2] { { meterLeftBarX0, meterScaleX0 }, { meterScaleX1, meterRightBarX1 } };
+        constexpr float tubeRadius = 10.0f;
+        constexpr float gpuSeam = 1.5f; // inside the bezel's chamfer
 
         juce::Colour rgb (int r, int g, int b, float a = 1.0f)
         {
             return juce::Colour::fromRGBA ((juce::uint8) r, (juce::uint8) g, (juce::uint8) b, (juce::uint8) juce::roundToInt (a * 255.0f));
         }
 
+        juce::Colour white (float a) { return juce::Colours::white.withAlpha (a); }
+
+        // Reflections in the cover glass carry the faint cool cast of a coated
+        // pane, which sets them apart from the warm light behind it.
+        juce::Colour sky (float a) { return juce::Colour (0xffdce8ff).withAlpha (a); }
+
+        juce::Path roundedRect (juce::Rectangle<float> r, float radius)
+        {
+            juce::Path p;
+            p.addRoundedRectangle (r, radius);
+            return p;
+        }
+
+        juce::Rectangle<float> tubeArea (float x0, float x1)
+        {
+            return { x0, meterColumnTop, x1 - x0, meterColumnBottom - meterColumnTop };
+        }
     }
 
     // How "hot" the meter burns for a given reduction: dark at rest, gentle
@@ -36,6 +58,16 @@ namespace heat::ui
     float GainReductionDisplay::glassRadius()
     {
         return meterOuterRadius - meterRim;
+    }
+
+    juce::Rectangle<float> GainReductionDisplay::gpuWindowBounds()
+    {
+        return glassBounds().expanded (gpuSeam);
+    }
+
+    float GainReductionDisplay::gpuWindowRadius()
+    {
+        return glassRadius() + gpuSeam;
     }
 
     float GainReductionDisplay::yForDb (float db)
@@ -62,7 +94,12 @@ namespace heat::ui
     void GainReductionDisplay::setInstrumentBounds (juce::Rectangle<float> outer)
     {
         outerBounds = outer;
-        setBounds (outer.expanded (margin).toNearestInt());
+        // Origin on a multiple of 4 reference units: a whole pixel at 50, 75,
+        // 100 and 125 %, so the cached layers are copied 1:1, not resampled.
+        const auto area = outer.expanded (margin);
+        const int x = 4 * static_cast<int> (std::floor (area.getX() / 4.0f));
+        const int y = 4 * static_cast<int> (std::floor (area.getY() / 4.0f));
+        setBounds (x, y, static_cast<int> (std::ceil (area.getRight())) - x, static_cast<int> (std::ceil (area.getBottom())) - y);
     }
 
     void GainReductionDisplay::resized()
@@ -98,7 +135,7 @@ namespace heat::ui
         if (gpuMode && onGpuFrame)
             onGpuFrame();
         else
-            repaint();
+            repaintGlass();
     }
 
     void GainReductionDisplay::pushFrame (float deepestLeftDb, float deepestRightDb, double dt)
@@ -141,7 +178,7 @@ namespace heat::ui
             if (gpuMode && onGpuFrame)
                 onGpuFrame();
             else
-                repaint();
+                repaintGlass();
             if (auto* h = getAccessibilityHandler())
                 h->notifyAccessibilityEvent (juce::AccessibilityEvent::valueChanged);
         }
@@ -160,70 +197,127 @@ namespace heat::ui
         {
             juce::Graphics g (background);
             g.addTransform (toRef);
-            if (gpuMode)
-            {
-                // Leave the glass interior clear: the GPU layer shows through.
-                juce::Path hole;
-                hole.addRectangle (meterOuter.expanded (margin));
-                hole.addRoundedRectangle (glassBounds(), glassRadius());
-                hole.setUsingNonZeroWinding (false);
-                g.reduceClipRegion (hole);
-            }
             paintBackground (g);
+        }
+        if (gpuMode)
+        {
+            // Leave the GPU window clear: the OpenGL layer shows through. The
+            // window is cut out of the finished layer in one copy; clipping each
+            // primitive of the bezel separately would stack their partial
+            // coverage on the window's antialiased edge, and the lighter face
+            // under the chamfer would bleed into the seam.
+            juce::Path hole;
+            hole.addRectangle (getBounds().toFloat());
+            hole.addRoundedRectangle (gpuWindowBounds(), gpuWindowRadius());
+            hole.setUsingNonZeroWinding (false);
+            hole.applyTransform (toRef);
+            juce::Image cut (juce::Image::ARGB, w, h, true);
+            juce::Graphics g (cut);
+            g.reduceClipRegion (hole);
+            g.drawImageAt (background, 0, 0);
+            background = cut;
         }
         overlay = juce::Image (juce::Image::ARGB, w, h, true);
         {
             juce::Graphics g (overlay);
             g.addTransform (toRef);
             paintOverlay (g);
+            paintGlass (g);
         }
     }
 
     void GainReductionDisplay::paintBackground (juce::Graphics& g)
     {
         const auto outer = meterOuter;
-        const auto glass = outer.reduced (meterRim);
+        const auto glass = glassBounds();
+        const float glassR = glassRadius();
+        const auto housing = roundedRect (outer, meterOuterRadius);
 
-        // Soft outer shadow on the panel.
+        // Shadow on the panel: a tight contact shadow under a wide ambient
+        // one, so the instrument sits on the metal instead of floating.
+        juce::DropShadow (juce::Colours::black.withAlpha (0.24f), 16, { 0, 6 }).drawForPath (g, housing);
+        juce::DropShadow (juce::Colours::black.withAlpha (0.32f), 3, { 0, 1 }).drawForPath (g, housing);
+
+        // Machined bezel, lit from the top left: polished outer edge, satin
+        // face, then a chamfer stepping down to a black seal around the glass.
         {
-            juce::Path p;
-            p.addRoundedRectangle (outer.translated (0.0f, 4.0f), meterOuterRadius);
-            juce::DropShadow (juce::Colours::black.withAlpha (0.28f), 12, { 0, 3 }).drawForPath (g, p);
+            juce::ColourGradient face (rgb (238, 239, 241), outer.getX(), outer.getY(),
+                                       rgb (180, 176, 174), outer.getRight(), outer.getBottom(), false);
+            face.addColour (0.45, rgb (213, 213, 214));
+            g.setGradientFill (face);
+            g.fillPath (housing);
+            g.setColour (rgb (70, 73, 77, 0.9f));
+            g.strokePath (housing, juce::PathStrokeType (1.0f));
+
+            juce::ColourGradient edge (white (0.95f), 0.0f, outer.getY(), white (0.30f), 0.0f, outer.getBottom(), false);
+            edge.addColour (0.2, white (0.75f));
+            g.setGradientFill (edge);
+            g.strokePath (roundedRect (outer.reduced (1.2f), meterOuterRadius - 1.2f), juce::PathStrokeType (1.0f));
+
+            // Turned step in the middle of the face.
+            juce::ColourGradient step (white (0.55f), 0.0f, outer.getY(), white (0.12f), 0.0f, outer.getBottom(), false);
+            g.setGradientFill (step);
+            g.strokePath (roundedRect (glass.expanded (4.6f), glassR + 4.6f), juce::PathStrokeType (0.8f));
+            g.setColour (juce::Colours::black.withAlpha (0.10f));
+            g.strokePath (roundedRect (glass.expanded (4.0f), glassR + 4.0f), juce::PathStrokeType (0.6f));
+
+            // The chamfer faces down at the top (in shade) and up at the bottom (lit).
+            juce::ColourGradient chamfer (rgb (96, 96, 100), 0.0f, glass.getY(), rgb (252, 252, 253), 0.0f, glass.getBottom(), false);
+            chamfer.addColour (0.1, rgb (128, 128, 132));
+            chamfer.addColour (0.6, rgb (190, 190, 193));
+            g.setGradientFill (chamfer);
+            g.strokePath (roundedRect (glass.expanded (2.2f), glassR + 2.2f), juce::PathStrokeType (2.6f));
+
+            g.setColour (rgb (6, 6, 7, 0.95f));
+            g.strokePath (roundedRect (glass.expanded (0.45f), glassR + 0.45f), juce::PathStrokeType (1.0f));
+
+            // Glints where the light catches the rounded corners.
+            juce::Path ring;
+            ring.addRoundedRectangle (outer.reduced (0.8f), meterOuterRadius - 0.8f);
+            ring.addRoundedRectangle (glass.expanded (3.4f), glassR + 3.4f);
+            ring.setUsingNonZeroWinding (false);
+            juce::Graphics::ScopedSaveState s (g);
+            g.reduceClipRegion (ring);
+            const float d = meterOuterRadius * (1.0f - juce::MathConstants<float>::sqrt2 * 0.5f) + 1.5f;
+            auto glint = [&g] (juce::Point<float> c, float radius, float alpha)
+            {
+                juce::ColourGradient gl (white (alpha), c, white (0.0f), c + juce::Point<float> (radius, 0.0f), true);
+                gl.addColour (0.3, white (0.45f * alpha));
+                g.setGradientFill (gl);
+                g.fillEllipse (juce::Rectangle<float> (2.0f * radius, 2.0f * radius).withCentre (c));
+            };
+            glint (outer.getTopLeft() + juce::Point<float> (d, d), 26.0f, 0.75f);
+            glint (outer.getBottomRight() - juce::Point<float> (d, d), 18.0f, 0.3f);
         }
 
-        // Machined silver rim.
-        {
-            juce::Path rim;
-            rim.addRoundedRectangle (outer, meterOuterRadius);
-            juce::ColourGradient rg (rgb (228, 230, 232), outer.getX(), outer.getY(),
-                                     rgb (196, 190, 186), outer.getX(), outer.getBottom(), false);
-            rg.addColour (0.5, rgb (206, 206, 207));
-            g.setGradientFill (rg);
-            g.fillPath (rim);
-            g.setColour (rgb (80, 84, 88, 0.85f));
-            g.strokePath (rim, juce::PathStrokeType (1.0f));
-            g.setColour (juce::Colours::white.withAlpha (0.9f));
-            juce::Path hi;
-            hi.addRoundedRectangle (outer.reduced (1.2f), meterOuterRadius - 1.2f);
-            g.strokePath (hi, juce::PathStrokeType (1.0f));
-        }
-
-        // Dark glass body.
-        juce::Path glassPath;
-        glassPath.addRoundedRectangle (glass, meterOuterRadius - meterRim);
+        // Back plate, set deep under the glass.
+        const auto glassPath = roundedRect (glass, glassR);
         {
             juce::ColourGradient gg (rgb (8, 8, 9), glass.getX(), glass.getY(),
                                      rgb (24, 20, 18), glass.getX(), glass.getBottom(), false);
             gg.addColour (0.35, rgb (12, 12, 13));
             g.setGradientFill (gg);
             g.fillPath (glassPath);
-            // Inner shadow along the top edge.
+
             juce::Graphics::ScopedSaveState s (g);
             g.reduceClipRegion (glassPath);
-            juce::ColourGradient top (juce::Colours::black.withAlpha (0.7f), glass.getX(), glass.getY(),
-                                      juce::Colours::transparentBlack, glass.getX(), glass.getY() + 26.0f, false);
-            g.setGradientFill (top);
+
+            // The plate curves away from the middle.
+            juce::ColourGradient lift (rgb (255, 236, 222, 0.035f), glass.getCentreX(), glass.getCentreY() + 30.0f,
+                                       rgb (255, 236, 222, 0.0f), glass.getCentreX() + 0.7f * glass.getWidth(), glass.getCentreY() + 30.0f, true);
+            g.setGradientFill (lift);
             g.fillRect (glass);
+
+            // The bezel walls shade the recess: most at the top, least at the bottom.
+            auto shade = [&g, &glass] (juce::Point<float> from, juce::Point<float> to, float alpha)
+            {
+                g.setGradientFill (juce::ColourGradient (juce::Colours::black.withAlpha (alpha), from, juce::Colours::transparentBlack, to, false));
+                g.fillRect (glass);
+            };
+            shade ({ 0.0f, glass.getY() }, { 0.0f, glass.getY() + 30.0f }, 0.75f);
+            shade ({ glass.getX(), 0.0f }, { glass.getX() + 14.0f, 0.0f }, 0.45f);
+            shade ({ glass.getRight(), 0.0f }, { glass.getRight() - 10.0f, 0.0f }, 0.35f);
+            shade ({ 0.0f, glass.getBottom() }, { 0.0f, glass.getBottom() - 6.0f }, 0.25f);
         }
 
         // Thin warm inner rim (the reference glass carries an amber edge).
@@ -241,19 +335,26 @@ namespace heat::ui
             g.strokePath (inner, juce::PathStrokeType (4.0f));
         }
 
-        // Empty glass columns (the lit bodies are drawn on top per frame).
-        auto column = [&g] (float x0, float x1)
+        // Empty glass tubes (the lit bodies are drawn on top per frame): round,
+        // so their walls fall off into shadow.
+        for (auto [x0, x1] : tubes)
         {
-            juce::Path p;
-            p.addRoundedRectangle (x0, meterColumnTop, x1 - x0, meterColumnBottom - meterColumnTop, 10.0f);
+            const auto area = tubeArea (x0, x1);
+            const auto tube = roundedRect (area, tubeRadius);
             juce::ColourGradient cg (rgb (24, 24, 25, 0.0f), 0.0f, meterColumnTop - 20.0f,
                                      rgb (30, 27, 25), 0.0f, meterColumnBottom, false);
             cg.addColour (0.18, rgb (26, 26, 27));
             g.setGradientFill (cg);
-            g.fillPath (p);
-        };
-        column (meterLeftBarX0, meterScaleX0);
-        column (meterScaleX1, meterRightBarX1);
+            g.fillPath (tube);
+
+            juce::Graphics::ScopedSaveState s (g);
+            g.reduceClipRegion (tube);
+            juce::ColourGradient round (juce::Colours::black.withAlpha (0.42f), x0, 0.0f, juce::Colours::black.withAlpha (0.5f), x1, 0.0f, false);
+            round.addColour (0.3, juce::Colours::transparentBlack);
+            round.addColour (0.62, juce::Colours::transparentBlack);
+            g.setGradientFill (round);
+            g.fillRect (area);
+        }
     }
 
     void GainReductionDisplay::paintOverlay (juce::Graphics& g)
@@ -301,6 +402,75 @@ namespace heat::ui
         }
 
         drawTextInInkBox (g, "GAIN REDUCTION", Weight::regular, colours::meterTitle, 692.5f, 846.0f, 195.0f, 206.0f);
+    }
+
+    void GainReductionDisplay::paintGlass (juce::Graphics& g)
+    {
+        const auto glass = glassBounds();
+        const float glassR = glassRadius();
+        juce::Graphics::ScopedSaveState s (g);
+        g.reduceClipRegion (roundedRect (glass, glassR));
+
+        // Tube glass: a soft sheen and a specular line on the lit side, a
+        // faint reflection on the far wall. Visible over embers and empty tube alike.
+        for (auto [x0, x1] : tubes)
+        {
+            const auto area = tubeArea (x0, x1);
+            const float w = area.getWidth();
+            juce::Graphics::ScopedSaveState ts (g);
+            g.reduceClipRegion (roundedRect (area, tubeRadius));
+
+            g.setGradientFill (juce::ColourGradient (white (0.07f), x0 + 0.08f * w, 0.0f, white (0.0f), x0 + 0.55f * w, 0.0f, false));
+            g.fillRect (area);
+
+            juce::ColourGradient spec (white (0.0f), 0.0f, area.getY() + 2.0f, white (0.0f), 0.0f, area.getBottom() - 2.0f, false);
+            spec.addColour (0.05, white (0.30f));
+            spec.addColour (0.45, white (0.13f));
+            spec.addColour (0.92, white (0.18f));
+            g.setGradientFill (spec);
+            g.fillRoundedRectangle ({ x0 + 0.22f * w, area.getY() + 3.0f, 2.2f, area.getHeight() - 6.0f }, 1.1f);
+
+            juce::ColourGradient far (white (0.0f), 0.0f, area.getY() + 6.0f, white (0.0f), 0.0f, area.getBottom() - 6.0f, false);
+            far.addColour (0.2, white (0.08f));
+            far.addColour (0.8, white (0.06f));
+            g.setGradientFill (far);
+            g.fillRect (juce::Rectangle<float> (x1 - 3.2f, area.getY(), 1.0f, area.getHeight()));
+        }
+
+        const float w = glass.getWidth(), h = glass.getHeight();
+
+        // Cover glass. A softbox reflected in the top-left corner ...
+        {
+            const auto hot = glass.getTopLeft() + juce::Point<float> (0.2f * w, 0.05f * h);
+            juce::ColourGradient box (sky (0.11f), hot, sky (0.0f), hot + juce::Point<float> (0.62f * w, 0.0f), true);
+            box.addColour (0.45, sky (0.035f));
+            g.setGradientFill (box);
+            g.fillRect (glass);
+        }
+
+        // ... the crystal's curved reflection sweeping over the top of the pane ...
+        {
+            const float x0 = glass.getX() - 2.0f, x1 = glass.getRight() + 2.0f, top = glass.getY() - 2.0f;
+            juce::Path sweep;
+            sweep.startNewSubPath (x0, top);
+            sweep.lineTo (x1, top);
+            sweep.lineTo (x1, glass.getY() + 0.2f * h);
+            sweep.cubicTo (x1 - 0.35f * w, glass.getY() + 0.29f * h, x0 + 0.35f * w, glass.getY() + 0.36f * h, x0, glass.getY() + 0.46f * h);
+            sweep.closeSubPath();
+            g.setGradientFill (juce::ColourGradient (sky (0.07f), glass.getX(), glass.getY(),
+                                                     sky (0.014f), glass.getX() + 0.12f * w, glass.getY() + 0.45f * h, false));
+            g.fillPath (sweep);
+        }
+
+        // ... more reflection at grazing angles under the bezel ...
+        g.setGradientFill (juce::ColourGradient (sky (0.08f), 0.0f, glass.getY(), sky (0.0f), 0.0f, glass.getY() + 16.0f, false));
+        g.fillRect (glass);
+
+        // ... and the polished edge of the pane catching the light.
+        juce::ColourGradient edge (white (0.45f), glass.getX(), glass.getY(), white (0.05f), glass.getRight(), glass.getBottom(), false);
+        edge.addColour (0.5, white (0.12f));
+        g.setGradientFill (edge);
+        g.strokePath (roundedRect (glass.reduced (1.9f), glassR - 1.9f), juce::PathStrokeType (1.0f));
     }
 
     void GainReductionDisplay::paintColumn (juce::Graphics& g, float x0, float x1, float db, bool outerEdgeLeft)
@@ -445,22 +615,22 @@ namespace heat::ui
         const auto toLocal = juce::AffineTransform::scale (1.0f / cachedScale);
         g.drawImageTransformed (background, toLocal);
 
-        const auto toRef = juce::AffineTransform::translation (-static_cast<float> (getX()), -static_cast<float> (getY()));
+        // Everything that moves sits under the scale and the cover glass.
         if (! gpuMode)
         {
             juce::Graphics::ScopedSaveState s (g);
-            g.addTransform (toRef);
+            g.addTransform (juce::AffineTransform::translation (-static_cast<float> (getX()), -static_cast<float> (getY())));
             paintDynamic (g, shown[0], shown[1]);
+            paintNeedle (g, peak);
         }
 
         g.drawImageTransformed (overlay, toLocal);
+    }
 
-        if (! gpuMode)
-        {
-            juce::Graphics::ScopedSaveState s (g);
-            g.addTransform (toRef);
-            paintNeedle (g, peak);
-        }
+    void GainReductionDisplay::repaintGlass()
+    {
+        // Everything that animates is clipped to the glass.
+        repaint (glassBounds().translated (-static_cast<float> (getX()), -static_cast<float> (getY())).getSmallestIntegerContainer().expanded (1));
     }
 
     std::unique_ptr<juce::AccessibilityHandler> GainReductionDisplay::createAccessibilityHandler()

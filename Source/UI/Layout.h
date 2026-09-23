@@ -50,7 +50,7 @@ namespace heat::ui::layout
     // --- Gain reduction meter ---------------------------------------------
     inline const juce::Rectangle<float> meterOuter { 639.0f, 149.0f, 261.0f, 395.0f };
     inline constexpr float meterOuterRadius = 38.0f;
-    inline constexpr float meterRim = 6.0f;
+    inline constexpr float meterRim = 9.0f; // machined bezel around the cover glass
     inline constexpr float meterColumnTop = 212.0f, meterColumnBottom = 522.0f;
     inline constexpr float meterLeftBarX0 = 680.0f, meterScaleX0 = 725.0f, meterScaleX1 = 811.0f, meterRightBarX1 = 857.5f;
     inline constexpr float meterDb[5]   { 0.0f, -3.0f, -6.0f, -12.0f, -24.0f };

@@ -12,18 +12,19 @@ namespace heat::ui
     // Attached (through a juce::OpenGLContext) to the editor. JUCE draws
     // renderOpenGL() first and then blends the software-painted component
     // layer on top; in GPU mode the chassis and the meter component leave the
-    // glass interior transparent, so what shows there is drawn here:
+    // GPU window (the glass plus a sliver of the static bezel, so the seam
+    // falls on identical pixels) transparent, so what shows there is drawn here:
     //
-    //   glass background     texture, rendered once per scale by the same code
+    //   back plate + bezel   texture, rendered once per scale by the same code
     //                        as the CPU meter (GainReductionDisplay::paintBackground)
     //   warmth, bloom, ember columns (ramp from a lookup texture), neon walls,
     //   white-hot base, rim glow, peak needle
     //                        one fragment shader, shapes as signed-distance
     //                        fields with pixel-accurate antialiasing
     //
-    // The scale overlay (centre column, ticks, legends) stays in the component
-    // layer above. Per frame the CPU only uploads a handful of uniforms: no
-    // path rasterisation, no pixel pushing.
+    // The scale overlay (centre column, ticks, legends) and the cover glass
+    // stay in the component layer above. Per frame the CPU only uploads a
+    // handful of uniforms: no path rasterisation, no pixel pushing.
     class GpuMeterRenderer : public juce::OpenGLRenderer
     {
     public:

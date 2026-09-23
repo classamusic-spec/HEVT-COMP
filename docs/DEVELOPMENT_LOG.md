@@ -273,3 +273,41 @@ Result: 89 DSP tests / 2730 checks, all passing; ASan/UBSan clean.
 * pluginval 1.0.4 strictness 10 with editor (OpenGL meter on): SUCCESS.
 * CPU re-measured with warm-up and best-of-three; the shared VM still
   varies ±20 %, so feature costs are reported as ranges.
+
+## Phase 24 — Glass-encased gain-reduction meter
+
+Request: make the gain-reduction window feel glass-encased, AAA quality.
+
+* Design, iterated on 2x renders of three meter states and at the default
+  75 %: a 9-unit machined bezel (polished edge, satin face, turned step,
+  chamfer, seal, corner glints), a recessed back plate, round glass tubes
+  with specular lines, and a cover glass (softbox reflection, curved crystal
+  reflection, grazing-angle reflection, polished edge) whose reflections
+  carry a faint cool tint. A first thin diagonal streak read as a scratch
+  and was replaced by the softbox.
+* All glass is static: cached in the overlay with the scale, drawn over the
+  embers and the needle. Per frame only the glass is repainted.
+* Found on the way: at 75 / 125 % the meter's cached layers landed a
+  quarter pixel off the grid and were resampled (soft, and the reason 75 %
+  used to cost more than 100 %). The component origin now sits on a
+  multiple of 4 reference units: sharpness ×2.3 at 75 %, frame cost −40 %
+  (75 %) and −48 % (125 %) with the glass included.
+* GPU path: the static layers are shared, so the shader is unchanged. The
+  seam between the OpenGL and component layers was traced by capturing each
+  layer alone: clipping every bezel primitive separately stacked partial
+  coverage on the window edge and let the face bleed in. The window now
+  reaches into the static bezel, is cut from the finished bezel in one copy,
+  and the chassis hole is 2 units larger. Corner seam error 68 → 0 / 255.
+* `heat_gpucheck` failed once at 125 % and did not reproduce. Cause: with
+  no audio running, the editor's frame clock released the meter between the
+  checker's ticks. The checker now also reports the state through the
+  telemetry; 3 × 8 repeated runs are identical.
+* The render benchmark snapshotted each region with its own origin, which
+  placed cached layers differently from the editor at 75 / 125 %; regions
+  are now painted on the editor's grid (verified pixel-identical to the
+  full render). Old and new meter measured with the same tool and flags.
+* Fidelity vs the reference: 12.42 → 12.85 overall (meter region
+  17.0 → 22.2, the rest unchanged): the requested deviation.
+* Validation: plug-in 17 / 1412 and DSP 89 / 2730 pass; pluginval
+  strictness 10 SUCCESS (25 / 25, GPU meter on); `heat_gpucheck` 6 / 6 PASS
+  on the Release build.

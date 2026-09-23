@@ -9,12 +9,13 @@ MIX and HPF — while the engine underneath runs a calibrated feed-forward
 compressor with three detectors, program-dependent release, three
 character modes and oversampled, level-compensated colour stages.
 
-**2.1** adds, behind the gear (the front panel is unchanged):
-mid/side and MID / SIDE-only processing, look-ahead, a sidechain EQ
-(low-pass and bell), a true-peak output limiter, 2 / 3-band multiband
-compression that stays phase-true with MIX, a Jiles–Atherton hysteresis
-model for IRON (2.0 sessions keep the original model), and a GPU-rendered
-gain-reduction meter.
+**2.1** adds, behind the gear: mid/side and MID / SIDE-only processing,
+look-ahead, a sidechain EQ (low-pass and bell), a true-peak output limiter,
+2 / 3-band multiband compression that stays phase-true with MIX, and a
+Jiles–Atherton hysteresis model for IRON (2.0 sessions keep the original
+model). On the front panel the gain-reduction meter is now a glass
+instrument — machined bezel, glass tubes, cover glass — rendered on the GPU
+where available.
 
 ![HEAT editor](design/fidelity/HEAT_UI_RENDER.png)
 
